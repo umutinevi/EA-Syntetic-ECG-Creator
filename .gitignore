@@ -1,0 +1,5 @@
+venv/
+output_ecgs/
+__pycache__/
+*.pyc
+.DS_Store
