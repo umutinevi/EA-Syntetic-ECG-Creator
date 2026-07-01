@@ -29,7 +29,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=7.0"]
+dev = ["pytest>=7.0", "pyyaml>=6.0", "pyarrow>=14.0.0"]
 hf = ["huggingface_hub>=0.20.0", "datasets>=2.16.0", "pyarrow>=14.0.0", "pyyaml>=6.0"]
 
 [project.scripts]
