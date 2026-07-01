@@ -1,0 +1,57 @@
+[
+  {
+    "filename": "afib_atrial_fibrillation.png",
+    "ecg_id": 351,
+    "patient_id": 5304,
+    "scp_codes": {
+      "AFIB": 100.0,
+      "NST_": 0.0
+    },
+    "scp_filter": "AFIB",
+    "primary_label": "Atrial Fibrillation (AFIB)",
+    "secondary_label": "Irregularly irregular rhythm without discrete P waves",
+    "report": "atrial fibrillation with rapid ventricular response. non-specific st-t wave changes.",
+    "filename_hr": "records500/00000/00351_hr"
+  },
+  {
+    "filename": "pvc_left_coronary_cusp.png",
+    "ecg_id": 255,
+    "patient_id": 4867,
+    "scp_codes": {
+      "IRBBB": 100.0,
+      "PVC": 100.0,
+      "SR": 0.0
+    },
+    "scp_filter": "PVC",
+    "primary_label": "Premature Ventricular Contraction (PVC)",
+    "secondary_label": "Anatomic localization: Left site, Left Coronary Cusp region",
+    "report": "premature ventricular contraction(s). sinus rhythm. incomplete right bundle branch block. no definite pathology.",
+    "filename_hr": "records500/00000/00255_hr"
+  },
+  {
+    "filename": "avnrt_nodal_reentrant_tachycardia.png",
+    "ecg_id": 1299,
+    "patient_id": 14503,
+    "scp_codes": {
+      "PSVT": 100.0
+    },
+    "scp_filter": "PSVT",
+    "primary_label": "AVNRT \u2014 Atrioventricular Nodal Reentrant Tachycardia",
+    "secondary_label": "PTB-XL proxy: PSVT (paroxysmal supraventricular tachycardia)",
+    "report": "supraventrikul\u00c4re tachykardie rechtstyp linksposteriorer hemiblock st & t abnormal, wahrscheinlich    anteriore isch\u00c4mie oder linksbelastung    inferolaterale isch\u00c4mie oder linksbelastung",
+    "filename_hr": "records500/01000/01299_hr"
+  },
+  {
+    "filename": "wpw_right_free_wall.png",
+    "ecg_id": 2145,
+    "patient_id": 5974,
+    "scp_codes": {
+      "WPW": 100.0
+    },
+    "scp_filter": "WPW",
+    "primary_label": "Wolff-Parkinson-White (WPW) Syndrome",
+    "secondary_label": "Accessory pathway localization: Right Free Wall",
+    "report": "trace only requested.",
+    "filename_hr": "records500/02000/02145_hr"
+  }
+]

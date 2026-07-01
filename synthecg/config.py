@@ -12,6 +12,12 @@ LEAD_NAMES = ["I", "II", "III", "aVR", "aVL", "aVF", "V1", "V2", "V3", "V4", "V5
 
 YOLO_CLASSES = ["lead_region", "lead_label"]
 
+# Clinical aliases when PTB-XL lacks an exact SCP code.
+# AVNRT is classified under PSVT in SCP-ECG / PTB-XL.
+SCP_ALIASES: dict[str, str] = {
+    "AVNRT": "PSVT",
+}
+
 
 @dataclass
 class RenderConfig:

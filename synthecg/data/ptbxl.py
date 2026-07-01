@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from synthecg.config import SPLIT_FOLDS
+from synthecg.config import SCP_ALIASES, SPLIT_FOLDS
 
 DEFAULT_CACHE_DIR = Path.home() / ".cache" / "synthecg"
 
@@ -49,12 +49,19 @@ def load_completed_ecg_ids(output_dir: str | Path) -> set[int]:
     return completed
 
 
+def _resolve_diagnosis_code(diagnosis: str) -> str:
+    upper = diagnosis.upper()
+    return SCP_ALIASES.get(upper, diagnosis)
+
+
 def _filter_by_diagnosis(df: pd.DataFrame, diagnosis: str) -> pd.DataFrame:
     if diagnosis.lower() == "random":
         return df
-    filtered = df[df.scp_codes.apply(lambda codes: diagnosis in codes)]
+    code = _resolve_diagnosis_code(diagnosis)
+    filtered = df[df.scp_codes.apply(lambda codes: code in codes)]
     if filtered.empty:
-        raise ValueError(f"No records found for diagnosis: {diagnosis}")
+        alias_note = f" (alias for {diagnosis})" if code != diagnosis.upper() else ""
+        raise ValueError(f"No records found for diagnosis: {diagnosis}{alias_note}")
     return filtered
 
 

@@ -203,3 +203,13 @@ def test_select_records_unknown_diagnosis_raises():
     ).set_index("ecg_id")
     with pytest.raises(ValueError, match="No records found"):
         select_records(df, diagnosis="NOTACODE", count=1)
+
+
+def test_avnrt_alias_maps_to_psvt():
+    rows = [
+        {"ecg_id": 1, "patient_id": 1, "filename_hr": "a", "scp_codes": {"PSVT": 100.0}, "strat_fold": 1},
+        {"ecg_id": 2, "patient_id": 2, "filename_hr": "b", "scp_codes": {"NORM": 100.0}, "strat_fold": 2},
+    ]
+    df = _make_df(rows).set_index("ecg_id")
+    sample = select_records(df, diagnosis="AVNRT", count=1)
+    assert sample.index[0] == 1

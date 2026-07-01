@@ -16,7 +16,7 @@ def _add_generate_args(parser: argparse.ArgumentParser) -> None:
         dest="diagnosis",
         type=str,
         default="random",
-        help="Pathology SCP code (e.g. AFIB, NORM, PVC) or 'random'.",
+        help="Pathology SCP code (e.g. AFIB, NORM, PVC, AVNRT, WPW) or 'random'.",
     )
     parser.add_argument("-o", "--output-dir", type=str, default="output_ecgs", help="Output directory.")
     parser.add_argument("--seed", type=int, default=None, help="Random seed.")
