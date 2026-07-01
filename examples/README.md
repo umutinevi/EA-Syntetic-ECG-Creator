@@ -83,3 +83,26 @@ All examples use:
 | Paper speed | 25 mm/s |
 | Gain | 10 mm/mV |
 | Preprocessing | 0.5–40 Hz bandpass filter |
+
+---
+
+## Attribution & licenses
+
+These PNG files are **synthetic renderings** produced by SynthECG from third-party waveform datasets. If you share or republish them, cite the underlying sources.
+
+| Image | Dataset | Record | License |
+|-------|---------|--------|---------|
+| `sample_12lead_ecg.png` | [PTB-XL v1.0.3](https://physionet.org/content/ptb-xl/1.0.3/) | #3094 | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) |
+| `afib_atrial_fibrillation.png` | PTB-XL v1.0.3 | #351 | CC BY 4.0 |
+| `pvc_left_coronary_cusp.png` | [Zheng OT-VA](https://doi.org/10.1038/s41597-020-0440-8) | hospital_id=762912 | CC BY 4.0 |
+| `avnrt_nodal_reentrant_tachycardia.png` | PTB-XL v1.0.3 | #1299 | CC BY 4.0 |
+| `wpw_right_free_wall.png` | PTB-XL v1.0.3 | #4825 | CC BY 4.0 |
+
+**Required citations** — see the full list in the main [README Citation & license](../README.md#citation--license) section, including:
+
+- Wagner et al. (2020, 2022) — PTB-XL
+- Zheng et al. (2020) — OT-VA localization database
+- Betensky et al. (2011) — PVC/OT-VA V2 transition algorithm
+- Arruda et al. (1998) — WPW delta-wave localization algorithm
+
+SynthECG software: [MIT License](../LICENSE).
