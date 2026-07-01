@@ -159,6 +159,17 @@ def test_select_zheng_records_by_site(tmp_path):
     assert lcc.iloc[0]["site"] == "LCC"
 
 
+def test_zheng_microvolt_to_millivolt():
+    from synthecg.data.zheng_otva import _to_millivolts
+
+    microvolts = np.array([[1500.0, -2000.0]], dtype=np.float32)
+    millivolts = _to_millivolts(microvolts)
+    assert np.allclose(millivolts, [[1.5, -2.0]])
+
+    already_mv = np.array([[0.5, -1.2]], dtype=np.float32)
+    assert np.allclose(_to_millivolts(already_mv), already_mv)
+
+
 def test_fetch_zheng_record_resamples(tmp_path):
     fixture_cache = FIXTURES
     with patch("synthecg.data.zheng_otva.ensure_zheng_data") as mock_ensure:
