@@ -1,0 +1,41 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "synthecg"
+version = "0.2.0"
+description = "Generate ML-ready synthetic 12-lead ECG images from PTB-XL"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "SynthECG Contributors" }]
+keywords = ["ecg", "synthetic", "ptb-xl", "medical-imaging", "digitization"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Topic :: Scientific/Engineering :: Medical Science Apps.",
+]
+dependencies = [
+    "wfdb>=4.1.0",
+    "numpy>=1.21.0",
+    "opencv-python>=4.5.0",
+    "matplotlib>=3.5.0",
+    "pandas>=1.3.0",
+    "scipy>=1.7.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7.0"]
+
+[project.scripts]
+synthecg = "synthecg.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["synthecg*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
