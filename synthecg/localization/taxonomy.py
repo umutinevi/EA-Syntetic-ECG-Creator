@@ -42,6 +42,7 @@ SITE_LABELS: dict[str, str] = {
     "left_lateral": "Left Lateral Accessory Pathway",
     "left_septal": "Left Septal Accessory Pathway",
     "posteroseptal": "Posteroseptal Accessory Pathway",
+    "coronary_sinus_ostium": "Coronary Sinus Ostium (CS OS)",
     "anteroseptal": "Anteroseptal Accessory Pathway",
     "slow_fast_avnrt": "Slow-Fast AVNRT",
     "unknown_mechanism": "Unknown SVT Mechanism",
@@ -56,6 +57,7 @@ WPW_SITES = {
     "left_lateral",
     "left_septal",
     "posteroseptal",
+    "coronary_sinus_ostium",
     "anteroseptal",
 }
 

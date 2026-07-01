@@ -5,6 +5,8 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import patch
 
+from unittest.mock import patch
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -65,21 +67,52 @@ def test_pvc_algorithm_lvot_lcc():
     assert result is not None
     assert result.region == "LVOT"
     assert result.source == "algorithm"
+    assert result.verified is False
+    assert result.confidence <= 0.75
+    assert result.algorithm == "pvc_otva_literature_v2"
     assert result.features.get("v2_transition_ratio", 0) >= 0.6
 
 
-def test_wpw_algorithm_returns_ap_region():
+def test_wpw_literature_rules_cs_os_pattern():
+    """I− / II+ / V1− / low R/S should map to CS OS, not free wall (Milstein + combined rule)."""
     fs = 500.0
-    n = int(fs * 2)
-    signal = np.zeros((12, n), dtype=np.float32)
-    # Negative early deflection in II/aVF suggests right-sided pathway
-    signal[1, :20] = -0.2
-    signal[5, :20] = -0.2
-    signal[6, :20] = -0.1
-    result = infer_wpw_localization(signal, fs)
+    n = 100
+    qrs = np.zeros((12, n), dtype=np.float32)
+    qrs[6] = -0.2  # V1 negative dominant
+
+    with patch("synthecg.localization.wpw.extract_delta_polarities") as mock_pol:
+        mock_pol.return_value = {"I": "neg", "II": "pos", "III": "iso", "aVF": "pos", "V1": "neg"}
+        with patch("synthecg.localization.wpw.extract_qrs_segment_at_peak", return_value=qrs):
+            result = infer_wpw_localization(np.zeros((12, 500), dtype=np.float32), fs)
     assert result is not None
-    assert result.region == "AP"
-    assert result.site in {"right_free_wall", "right_lateral", "posteroseptal"}
+    assert result.site == "coronary_sinus_ostium"
+    assert result.site != "right_free_wall"
+    assert result.verified is False
+    assert result.confidence <= 0.50
+
+
+def test_wpw_arruda_negative_ii_coronary_venous():
+    fs = 500
+    n = 100
+    qrs = np.zeros((12, n), dtype=np.float32)
+    with patch("synthecg.localization.wpw.extract_delta_polarities") as mock_pol:
+        mock_pol.return_value = {"I": "neg", "II": "neg", "III": "neg", "aVF": "neg", "V1": "pos"}
+        with patch("synthecg.localization.wpw.extract_qrs_segment_at_peak", return_value=qrs):
+            result = infer_wpw_localization(np.zeros((12, 500), dtype=np.float32), 500.0)
+    assert result.site == "coronary_sinus_ostium"
+
+
+def test_wpw_ptbxl_4825_not_free_wall():
+    """Real PTB-XL WPW example should not be labeled right free wall (EP feedback: CS OS)."""
+    from synthecg.data.fetch import fetch_ptbxl_record
+    from synthecg.data.preprocess import preprocess_record
+
+    record = preprocess_record(fetch_ptbxl_record("records500/04000/04825_hr"), bandpass=True)
+    signal = record.p_signal.T
+    result = infer_wpw_localization(signal, float(record.fs))
+    assert result.site == "coronary_sinus_ostium"
+    assert result.site != "right_free_wall"
+    assert result.verified is False
 
 
 def test_infer_localization_afib_not_applicable():
@@ -153,6 +186,7 @@ def test_localization_from_row_ep_source():
     loc = localization_from_row(row)
     assert loc.source == "ep_ablation"
     assert loc.site == "LCC"
+    assert loc.verified is True
 
 
 def test_build_annotation_includes_localization():
