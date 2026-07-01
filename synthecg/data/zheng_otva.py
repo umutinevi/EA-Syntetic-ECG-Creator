@@ -26,6 +26,10 @@ DATABASE_ID = "zheng-otva"
 DEFAULT_CACHE_DIR = Path.home() / ".cache" / "synthecg" / "zheng_otva"
 SOURCE_FS = 2000.0
 TARGET_FS = 500.0
+# Zheng Figshare CSV amplitudes are in microvolts (µV); PTB-XL / renderer use millivolts (mV).
+UV_PER_MV = 1000.0
+# Values above this peak (in file units) are treated as µV; test fixtures use pre-scaled mV.
+UV_SCALE_THRESHOLD = 100.0
 
 DIAGNOSIS_URL = "https://ndownloader.figshare.com/files/17675474"
 ECG_ZIP_URL = "https://ndownloader.figshare.com/files/16838351"
@@ -166,6 +170,14 @@ def _read_ecg_csv(csv_path: Path) -> np.ndarray:
     return signal
 
 
+def _to_millivolts(signal: np.ndarray) -> np.ndarray:
+    """Convert Zheng CSV amplitudes from µV to mV when needed."""
+    peak = float(np.max(np.abs(signal)))
+    if peak > UV_SCALE_THRESHOLD:
+        return (signal / UV_PER_MV).astype(np.float32)
+    return signal.astype(np.float32)
+
+
 def _resample_signal(signal: np.ndarray, source_fs: float, target_fs: float) -> np.ndarray:
     if abs(source_fs - target_fs) < 1e-3:
         return signal.astype(np.float32)
@@ -197,7 +209,7 @@ def fetch_zheng_record(
     paths = ensure_zheng_data(cache_dir, download_ecg=True)
     csv_path = _find_ecg_csv(hospital_id, paths.ecg_dir)
     print(f"Loading Zheng record hospital_id={hospital_id} from {csv_path.name} ...")
-    signal = _read_ecg_csv(csv_path)
+    signal = _to_millivolts(_read_ecg_csv(csv_path))
     signal = _resample_signal(signal, SOURCE_FS, TARGET_FS)
     return SimpleNamespace(
         p_signal=signal,
