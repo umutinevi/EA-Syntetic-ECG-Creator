@@ -2,17 +2,17 @@
 
 An open-source Python tool for generating realistic, publication-ready synthetic 12-lead ECG images with **ML-ready ground truth** from the [PTB-XL Database](https://physionet.org/content/ptb-xl/).
 
-This tool fetches real clinical ECG signals from PhysioNet, plots them onto a standard medical grid (25 mm/s, 10 mm/mV), applies scan-style augmentations, and exports paired images, signals, annotations, and a dataset manifest.
+Version **0.3.0** adds an OpenCV renderer with calibration pulses and clinical headers, segmentation masks, YOLO bounding boxes, parallel batch generation, and a round-trip digitization benchmark.
 
 ## Features
 
 * **Real clinical data:** Uses actual PTB-XL waveforms across all 12 leads.
+* **OpenCV renderer (default):** Fixed 300 DPI canvas, medical grid, calibration pulses, headers/footers.
 * **Pathology filtering:** Filter by SCP-ECG codes (`AFIB`, `NORM`, `PVC`, `SR`, etc.) or sample randomly.
-* **Reproducible datasets:** `--seed`, PTB-XL `--split`, and `--unique-patients` support.
-* **ML-ready exports:** PNG images, `.npy` signals, JSON annotations, and `manifest.csv`.
-* **Cached metadata:** PTB-XL CSV is cached locally after the first download.
-* **Classic medical layout:** 3×4 + Lead II rhythm strip.
-* **Configurable artifacts:** `clean`, `scan` (default), or `clinical` (scan + perspective warp).
+* **Reproducible datasets:** `--seed`, PTB-XL `--split`, and `--unique-patients`.
+* **ML-ready exports:** PNG images, `.npy` signals, JSON annotations, segmentation masks, YOLO labels, and `manifest.csv`.
+* **Parallel generation:** `--workers N` for batch dataset builds.
+* **Digitization benchmark:** Round-trip correlation report via `synthecg-benchmark`.
 
 ## Installation
 
@@ -22,30 +22,27 @@ cd EA-Syntetic-ECG-Creator
 pip install -e .
 ```
 
-Or install dependencies only:
-
-```bash
-pip install -r requirements.txt
-```
-
 ## Usage
 
-### Recommended (package CLI)
+### Generate a dataset
 
 ```bash
-synthecg -n 10 -t AFIB --seed 42 --split train -o my_afib_dataset
+synthecg -n 10 -t AFIB --seed 42 --split train --save-clean -o my_afib_dataset
 ```
 
-Equivalent module invocation:
+### Parallel batch generation
 
 ```bash
-python -m synthecg -n 10 -t AFIB --seed 42 --split train -o my_afib_dataset
+synthecg -n 50 -t NORM --seed 42 --workers 4 -o norm_batch
 ```
 
-### Backward-compatible script
+### Run digitization benchmark
+
+After generating a dataset with `--save-clean` (recommended for benchmark):
 
 ```bash
-python generate_realistic_ecg.py -n 10 -t AFIB -o my_afib_dataset
+synthecg-benchmark my_afib_dataset
+synthecg-benchmark my_afib_dataset --use-augmented   # test on final augmented images
 ```
 
 ### Arguments
@@ -53,46 +50,62 @@ python generate_realistic_ecg.py -n 10 -t AFIB -o my_afib_dataset
 | Flag | Description |
 |------|-------------|
 | `-n`, `--count` | Number of ECG images to generate (default: `5`) |
-| `-t`, `--type` | SCP code such as `NORM`, `AFIB`, `PVC`, or `random` (default) |
+| `-t`, `--type` | SCP code such as `NORM`, `AFIB`, `PVC`, or `random` |
 | `-o`, `--output-dir` | Output directory (default: `output_ecgs`) |
 | `--seed` | Random seed for reproducible sampling and augmentations |
 | `--split` | PTB-XL split: `all`, `train` (folds 1–8), `val` (9), `test` (10) |
-| `--cache-dir` | Custom cache directory for PTB-XL metadata CSV |
-| `--unique-patients` | Sample at most one record per patient |
+| `--workers` | Parallel worker processes (default: `1`) |
+| `--renderer` | `opencv` (default) or `matplotlib` |
+| `--save-clean` | Save pre-augmentation images to `images/clean/` |
 | `--augment-profile` | `clean`, `scan`, or `clinical` |
-| `--no-signals` | Skip `.npy` signal export |
-| `--no-annotations` | Skip JSON annotation export |
+| `--no-masks` | Skip segmentation mask export |
+| `--no-yolo` | Skip YOLO label export |
 
 ## Output structure
 
 ```
 my_afib_dataset/
 ├── manifest.csv
+├── benchmark_report.json          # after running synthecg-benchmark
 ├── images/
-│   └── ecg_AFIB_12345.png
+│   ├── ecg_AFIB_12345.png
+│   └── clean/
+│       └── ecg_AFIB_12345.png     # when --save-clean
 ├── signals/
-│   └── ecg_AFIB_12345.npy      # shape (12, n_samples), float32 mV
+│   └── ecg_AFIB_12345.npy         # shape (12, n_samples), float32 mV
+├── masks/
+│   └── ecg_AFIB_12345.png         # waveform segmentation mask
+├── labels/
+│   ├── classes.txt                # lead_region, lead_label
+│   └── ecg_AFIB_12345.txt         # YOLO format bboxes
 └── annotations/
-    └── ecg_AFIB_12345.json     # metadata, render params, paths
+    └── ecg_AFIB_12345.json        # metadata, lead bboxes, render params
 ```
 
-### Manifest columns
+## Annotation JSON
 
-`sample_id`, `ecg_id`, `patient_id`, `diagnosis_query`, `scp_codes`, `strat_fold`, `image_path`, `signal_path`, `annotation_path`, `augmentations`
+Each annotation includes per-lead bounding boxes for digitization and detection:
 
-## Example
-
-```bash
-synthecg -n 3 -t NORM --seed 42 --split train -o demo_dataset
+```json
+{
+  "leads": [
+    {
+      "name": "I",
+      "lead_idx": 0,
+      "bbox": [80, 120, 738, 575],
+      "plot_bbox": [154, 140, 600, 535],
+      "baseline_y": 407,
+      "t_start": 0.0,
+      "t_end": 2.5
+    }
+  ],
+  "render": {
+    "backend": "opencv",
+    "px_per_mv": 118.11,
+    "px_per_second": 295.28
+  }
+}
 ```
-
-First run downloads and caches PTB-XL metadata (~30s). Subsequent runs use the local cache.
-
-## Scientific use
-
-This pipeline helps the ML and computer vision community build realistic ECG image datasets for digitization and classification without private clinical data constraints.
-
-**Data source:** Wagner, P., et al. (2020). PTB-XL, a large publicly available electrocardiography dataset. *Scientific Data*.
 
 ## Development
 
@@ -100,6 +113,12 @@ This pipeline helps the ML and computer vision community build realistic ECG ima
 pip install -e ".[dev]"
 pytest
 ```
+
+## Scientific use
+
+This pipeline helps the ML and computer vision community build realistic ECG image datasets for digitization and classification without private clinical data constraints.
+
+**Data source:** Wagner, P., et al. (2020). PTB-XL, a large publicly available electrocardiography dataset. *Scientific Data*.
 
 ## License
 

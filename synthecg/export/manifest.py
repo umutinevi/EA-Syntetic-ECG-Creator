@@ -2,8 +2,6 @@ import csv
 import json
 from pathlib import Path
 
-from synthecg.config import LEAD_NAMES
-
 
 class ManifestWriter:
     """Append-only CSV manifest for generated dataset samples."""
@@ -18,6 +16,9 @@ class ManifestWriter:
         "image_path",
         "signal_path",
         "annotation_path",
+        "mask_path",
+        "yolo_path",
+        "clean_image_path",
         "augmentations",
     ]
 
@@ -38,6 +39,9 @@ class ManifestWriter:
         image_path: str,
         signal_path: str | None,
         annotation_path: str | None,
+        mask_path: str | None = None,
+        yolo_path: str | None = None,
+        clean_image_path: str | None = None,
         augmentations: list[str],
     ) -> None:
         self._rows.append(
@@ -51,6 +55,9 @@ class ManifestWriter:
                 "image_path": image_path,
                 "signal_path": signal_path or "",
                 "annotation_path": annotation_path or "",
+                "mask_path": mask_path or "",
+                "yolo_path": yolo_path or "",
+                "clean_image_path": clean_image_path or "",
                 "augmentations": json.dumps(augmentations),
             }
         )
