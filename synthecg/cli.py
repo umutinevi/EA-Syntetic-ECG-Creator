@@ -49,11 +49,29 @@ def build_parser() -> argparse.ArgumentParser:
         help="Sample at most one record per patient.",
     )
     parser.add_argument(
+        "--workers",
+        type=int,
+        default=1,
+        help="Parallel worker processes for batch generation (default: 1).",
+    )
+    parser.add_argument(
+        "--renderer",
+        type=str,
+        choices=["opencv", "matplotlib"],
+        default="opencv",
+        help="Rendering backend (default: opencv).",
+    )
+    parser.add_argument(
         "--augment-profile",
         type=str,
         choices=["clean", "scan", "clinical"],
         default="scan",
-        help="Artifact profile: clean (no effects), scan (default), clinical (scan + perspective).",
+        help="Artifact profile: clean, scan (default), or clinical (scan + perspective).",
+    )
+    parser.add_argument(
+        "--save-clean",
+        action="store_true",
+        help="Also save pre-augmentation clean images to images/clean/.",
     )
     parser.add_argument(
         "--no-signals",
@@ -64,6 +82,16 @@ def build_parser() -> argparse.ArgumentParser:
         "--no-annotations",
         action="store_true",
         help="Skip exporting JSON annotation files.",
+    )
+    parser.add_argument(
+        "--no-masks",
+        action="store_true",
+        help="Skip exporting waveform segmentation masks.",
+    )
+    parser.add_argument(
+        "--no-yolo",
+        action="store_true",
+        help="Skip exporting YOLO-format label files.",
     )
     return parser
 
@@ -80,9 +108,13 @@ def main(argv: list[str] | None = None) -> None:
         seed=args.seed,
         split=args.split,
         unique_patients=args.unique_patients,
+        workers=max(1, args.workers),
         export_signals=not args.no_signals,
         export_annotations=not args.no_annotations,
-        render=RenderConfig(),
+        export_masks=not args.no_masks,
+        export_yolo=not args.no_yolo,
+        save_clean=args.save_clean,
+        render=RenderConfig(backend=args.renderer),
         augment=AugmentConfig(profile=args.augment_profile, seed=args.seed),
     )
 

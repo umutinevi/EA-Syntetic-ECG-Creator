@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "synthecg"
-version = "0.2.0"
+version = "0.3.0"
 description = "Generate ML-ready synthetic 12-lead ECG images from PTB-XL"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -32,6 +32,7 @@ dev = ["pytest>=7.0"]
 
 [project.scripts]
 synthecg = "synthecg.cli:main"
+synthecg-benchmark = "synthecg.benchmark.__main__:main"
 
 [tool.setuptools.packages.find]
 where = ["."]
