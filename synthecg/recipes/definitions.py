@@ -73,6 +73,21 @@ RECIPES: dict[str, dict[str, Any]] = {
             "backend": "opencv",
         },
     },
+    "arrhythmia-localization-v1": {
+        "description": (
+            "Balanced EP-validated OT-VA localization sites from Zheng dataset "
+            "(LCC, FreeWall, AnteriorSeptal, PosteriorSeptal)."
+        ),
+        "database": "zheng-otva",
+        "balanced_sites": ["LCC", "FreeWall", "AnteriorSeptal", "PosteriorSeptal"],
+        "count_per_site": 5,
+        "count": 20,
+        "augment_profile": "scan",
+        "save_clean": True,
+        "workers": 1,
+        "bandpass_filter": True,
+        "infer_localization": False,
+    },
 }
 
 

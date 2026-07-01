@@ -1,6 +1,7 @@
 [
   {
     "filename": "afib_atrial_fibrillation.png",
+    "database": "ptb-xl/1.0.3",
     "ecg_id": 351,
     "patient_id": 5304,
     "scp_codes": {
@@ -11,25 +12,51 @@
     "primary_label": "Atrial Fibrillation (AFIB)",
     "secondary_label": "Irregularly irregular rhythm without discrete P waves",
     "report": "atrial fibrillation with rapid ventricular response. non-specific st-t wave changes.",
-    "filename_hr": "records500/00000/00351_hr"
+    "filename_hr": "records500/00000/00351_hr",
+    "localization": {
+      "level": "none",
+      "region": null,
+      "site": "none",
+      "site_label": "Not Applicable",
+      "source": "manual_curated",
+      "confidence": 1.0,
+      "taxonomy_version": "synthecg-v1",
+      "algorithm": null,
+      "features": {
+        "note": "Atrial fibrillation has no discrete ectopic origin"
+      },
+      "decision_path": []
+    }
   },
   {
     "filename": "pvc_left_coronary_cusp.png",
-    "ecg_id": 255,
-    "patient_id": 4867,
+    "database": "zheng-otva",
+    "ecg_id": 762912,
+    "patient_id": 762912,
     "scp_codes": {
-      "IRBBB": 100.0,
-      "PVC": 100.0,
-      "SR": 0.0
+      "PVC": 100.0
     },
     "scp_filter": "PVC",
     "primary_label": "Premature Ventricular Contraction (PVC)",
-    "secondary_label": "Anatomic localization: Left site, Left Coronary Cusp region",
-    "report": "premature ventricular contraction(s). sinus rhythm. incomplete right bundle branch block. no definite pathology.",
-    "filename_hr": "records500/00000/00255_hr"
+    "secondary_label": "Localization: LVOT / Left Coronary Cusp (source=ep_ablation, conf=1.00)",
+    "report": "Zheng OT-VA EP-validated LCC origin (parameters from ablation mapping.",
+    "filename_hr": "762912",
+    "localization": {
+      "level": "sublocation",
+      "region": "LVOT",
+      "site": "LCC",
+      "site_label": "Left Coronary Cusp",
+      "source": "ep_ablation",
+      "confidence": 1.0,
+      "taxonomy_version": "synthecg-v1",
+      "algorithm": null,
+      "features": {},
+      "decision_path": []
+    }
   },
   {
     "filename": "avnrt_nodal_reentrant_tachycardia.png",
+    "database": "ptb-xl/1.0.3",
     "ecg_id": 1299,
     "patient_id": 14503,
     "scp_codes": {
@@ -37,21 +64,65 @@
     },
     "scp_filter": "PSVT",
     "primary_label": "AVNRT \u2014 Atrioventricular Nodal Reentrant Tachycardia",
-    "secondary_label": "PTB-XL proxy: PSVT (paroxysmal supraventricular tachycardia)",
+    "secondary_label": "Mechanism: Slow-Fast AVNRT (source=algorithm)",
     "report": "supraventrikul\u00c4re tachykardie rechtstyp linksposteriorer hemiblock st & t abnormal, wahrscheinlich    anteriore isch\u00c4mie oder linksbelastung    inferolaterale isch\u00c4mie oder linksbelastung",
-    "filename_hr": "records500/01000/01299_hr"
+    "filename_hr": "records500/01000/01299_hr",
+    "localization": {
+      "level": "mechanism",
+      "region": null,
+      "site": "slow_fast_avnrt",
+      "site_label": "Slow-Fast AVNRT",
+      "source": "algorithm",
+      "confidence": 0.5,
+      "taxonomy_version": "synthecg-v1",
+      "algorithm": "mechanism_proxy_v1",
+      "features": {
+        "note": "PTB-XL PSVT used as AVNRT proxy; mechanism only"
+      },
+      "decision_path": [
+        "psvt_proxy=avnrt_mechanism"
+      ]
+    }
   },
   {
     "filename": "wpw_right_free_wall.png",
-    "ecg_id": 2145,
-    "patient_id": 5974,
+    "database": "ptb-xl/1.0.3",
+    "ecg_id": 4825,
+    "patient_id": 19477,
     "scp_codes": {
-      "WPW": 100.0
+      "WPW": 100.0,
+      "ABQRS": 0.0,
+      "SR": 0.0
     },
     "scp_filter": "WPW",
     "primary_label": "Wolff-Parkinson-White (WPW) Syndrome",
-    "secondary_label": "Accessory pathway localization: Right Free Wall",
-    "report": "trace only requested.",
-    "filename_hr": "records500/02000/02145_hr"
+    "secondary_label": "Localization: AP / Right Free Wall Accessory Pathway (source=algorithm, conf=0.82)",
+    "report": "sinusrhythmus lagetyp normal unspezifischer intraventrikul\u00c4rer block m\u00d6glicherweise wpw typ b linkshypertrophie qrs(t) abnormal    inferiorer myokardschaden nicht auszuschliessen",
+    "filename_hr": "records500/04000/04825_hr",
+    "localization": {
+      "level": "sublocation",
+      "region": "AP",
+      "site": "right_free_wall",
+      "site_label": "Right Free Wall Accessory Pathway",
+      "source": "algorithm",
+      "confidence": 0.82,
+      "taxonomy_version": "synthecg-v1",
+      "algorithm": "wpw_arruda_simplified_v1",
+      "features": {
+        "delta_polarity": {
+          "I": "neg",
+          "II": "pos",
+          "aVF": "pos",
+          "V1": "neg"
+        },
+        "rs_v1": 0.24160561990392065,
+        "rs_iii": 0.6532618657155486
+      },
+      "decision_path": [
+        "delta_polarity={'I': 'neg', 'II': 'pos', 'aVF': 'pos', 'V1': 'neg'}",
+        "rs_v1=0.242 rs_iii=0.653",
+        "right_free_wall=V1_neg_low_rs"
+      ]
+    }
   }
 ]

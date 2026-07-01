@@ -1,0 +1,1 @@
+"""Localization benchmark CLI package."""

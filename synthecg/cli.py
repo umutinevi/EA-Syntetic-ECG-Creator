@@ -27,7 +27,13 @@ def _add_generate_args(parser: argparse.ArgumentParser) -> None:
         default="all",
         help="PTB-XL stratified split.",
     )
-    parser.add_argument("--cache-dir", type=str, default=None, help="PTB-XL metadata cache directory.")
+    parser.add_argument("--cache-dir", type=str, default=None, help="Dataset metadata cache directory.")
+    parser.add_argument(
+        "--database",
+        type=str,
+        default="ptb-xl/1.0.3",
+        help="Source database: ptb-xl/1.0.3 or zheng-otva.",
+    )
     parser.add_argument("--unique-patients", action="store_true", help="One record per patient.")
     parser.add_argument("--workers", type=int, default=1, help="Parallel worker processes.")
     parser.add_argument("--resume", action="store_true", help="Skip ecg_ids already in manifest.csv.")
@@ -61,6 +67,7 @@ def _config_from_generate_args(args: argparse.Namespace) -> GenerationConfig:
         count=args.count,
         diagnosis=args.diagnosis,
         output_dir=args.output_dir,
+        database=args.database,
         cache_dir=args.cache_dir,
         seed=args.seed,
         split=args.split,
