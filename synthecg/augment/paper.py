@@ -2,7 +2,11 @@ import cv2
 import numpy as np
 
 from synthecg.config import AugmentConfig
-from synthecg.augment.geometric import apply_perspective_warp_array
+from synthecg.augment.geometric import (
+    apply_jpeg_compression,
+    apply_perspective_warp_array,
+    apply_rotation_array,
+)
 
 
 def apply_paper_artifacts_to_arrays(
@@ -37,6 +41,17 @@ def apply_paper_artifacts_to_arrays(
 
     img = cv2.GaussianBlur(img, (3, 3), 0)
     applied.append("gaussian_blur")
+
+    if config.profile in ("scan", "clinical") and rng.random() < (0.4 if config.profile == "scan" else 0.7):
+        img = apply_rotation_array(img, rng)
+        if mask is not None:
+            mask = apply_rotation_array(cv2.cvtColor(mask, cv2.COLOR_GRAY2BGR), rng)
+            mask = cv2.cvtColor(mask, cv2.COLOR_BGR2GRAY)
+        applied.append("rotation")
+
+    if config.profile in ("scan", "clinical") and rng.random() < (0.35 if config.profile == "scan" else 0.6):
+        img = apply_jpeg_compression(img, rng)
+        applied.append("jpeg_compression")
 
     if config.profile == "clinical" and rng.random() < 0.5:
         img = apply_perspective_warp_array(img, rng)

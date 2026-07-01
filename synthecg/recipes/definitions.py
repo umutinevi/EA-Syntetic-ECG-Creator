@@ -56,6 +56,23 @@ RECIPES: dict[str, dict[str, Any]] = {
             "show_grid": True,
         },
     },
+    "digitization-12x1": {
+        "description": "50 train samples in 12x1 stacked layout for vertical lead digitization.",
+        "count": 50,
+        "split": "train",
+        "diagnosis": "random",
+        "augment_profile": "scan",
+        "save_clean": True,
+        "workers": 2,
+        "bandpass_filter": True,
+        "render": {
+            "layout": "12x1",
+            "speed_mm_s": 25,
+            "gain_mm_mv": 10,
+            "show_grid": True,
+            "backend": "opencv",
+        },
+    },
 }
 
 

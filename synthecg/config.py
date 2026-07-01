@@ -15,7 +15,7 @@ YOLO_CLASSES = ["lead_region", "lead_label"]
 
 @dataclass
 class RenderConfig:
-    layout: str = "3x4+1"
+    layout: Literal["3x4+1", "12x1"] = "3x4+1"
     speed_mm_s: int = 25
     gain_mm_mv: int = 10
     dpi: int = 300

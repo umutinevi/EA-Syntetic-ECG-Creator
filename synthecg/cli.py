@@ -4,6 +4,7 @@ import sys
 from synthecg.config import AugmentConfig, GenerationConfig, RenderConfig
 from synthecg.pipeline import generate_dataset
 from synthecg.recipes.builder import config_from_recipe
+from synthecg.export.huggingface import prepare_hf_export, push_to_hub
 from synthecg.recipes.definitions import list_recipes
 
 
@@ -33,6 +34,12 @@ def _add_generate_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--include-codes", nargs="+", default=[], help="Require all SCP codes (multi-label).")
     parser.add_argument("--exclude-codes", nargs="+", default=[], help="Exclude records with these SCP codes.")
     parser.add_argument("--renderer", choices=["opencv", "matplotlib"], default="opencv")
+    parser.add_argument(
+        "--layout",
+        choices=["3x4+1", "12x1"],
+        default="3x4+1",
+        help="ECG page layout (default: 3x4+1).",
+    )
     parser.add_argument("--speed", type=int, default=25, choices=[25, 50], help="Paper speed mm/s.")
     parser.add_argument("--gain", type=int, default=10, choices=[5, 10, 20], help="Voltage gain mm/mV.")
     parser.add_argument("--no-grid", action="store_true", help="Render without ECG grid lines.")
@@ -70,6 +77,7 @@ def _config_from_generate_args(args: argparse.Namespace) -> GenerationConfig:
         save_clean=args.save_clean,
         render=RenderConfig(
             backend=args.renderer,
+            layout=args.layout,
             speed_mm_s=args.speed,
             gain_mm_mv=args.gain,
             show_grid=not args.no_grid,
@@ -99,6 +107,15 @@ def build_parser() -> argparse.ArgumentParser:
 
     list_parser = dataset_sub.add_parser("list", help="List available dataset recipes.")
 
+    export_parser = subparsers.add_parser("export", help="Export datasets to external formats.")
+    export_sub = export_parser.add_subparsers(dest="export_command")
+    hf_parser = export_sub.add_parser("hf", help="Prepare or push a Hugging Face dataset.")
+    hf_parser.add_argument("-d", "--dataset-dir", required=True, help="Generated dataset directory.")
+    hf_parser.add_argument("-o", "--export-dir", default=None, help="Local HF export folder.")
+    hf_parser.add_argument("--layout", default="3x4+1", choices=["3x4+1", "12x1"])
+    hf_parser.add_argument("--repo-id", default=None, help="Hugging Face dataset repo id (user/name).")
+    hf_parser.add_argument("--push", action="store_true", help="Upload to Hugging Face Hub.")
+
     return parser
 
 
@@ -106,7 +123,7 @@ def main(argv: list[str] | None = None) -> None:
     argv = list(sys.argv[1:] if argv is None else argv)
 
     # Backward compatibility: `synthecg -n 5 -t NORM` without subcommand
-    if argv and argv[0] not in {"generate", "dataset"}:
+    if argv and argv[0] not in {"generate", "dataset", "export"}:
         argv = ["generate", *argv]
 
     parser = build_parser()
@@ -131,6 +148,28 @@ def main(argv: list[str] | None = None) -> None:
                 )
                 print(f"Building recipe '{args.recipe}' -> {args.output_dir}")
                 generate_dataset(config)
+            else:
+                parser.print_help()
+                raise SystemExit(1)
+        elif args.command == "export":
+            if args.export_command == "hf":
+                if args.push:
+                    if not args.repo_id:
+                        raise SystemExit("--repo-id is required when using --push")
+                    url = push_to_hub(
+                        args.dataset_dir,
+                        args.repo_id,
+                        layout=args.layout,
+                        export_dir=args.export_dir,
+                    )
+                    print(f"Uploaded to {url}")
+                else:
+                    out = prepare_hf_export(
+                        args.dataset_dir,
+                        export_dir=args.export_dir,
+                        layout=args.layout,
+                    )
+                    print(f"HF export prepared at {out}")
             else:
                 parser.print_help()
                 raise SystemExit(1)

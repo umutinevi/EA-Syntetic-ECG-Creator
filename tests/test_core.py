@@ -14,6 +14,8 @@ from synthecg.export.yolo import write_yolo_labels
 from synthecg.benchmark.digitize import pearson_correlation
 from synthecg.recipes.builder import config_from_recipe
 from synthecg.recipes.definitions import get_recipe, list_recipes
+from synthecg.export.huggingface import build_dataset_card, prepare_hf_export
+from synthecg.render.layouts.layout_12x1 import render_layout_12x1
 from synthecg.render.opencv_renderer import render_ecg_opencv
 from synthecg.render.types import LeadRegion
 
@@ -159,6 +161,40 @@ def test_yolo_label_format(tmp_path):
 def test_pearson_correlation_perfect():
     x = np.sin(np.linspace(0, 4 * np.pi, 200))
     assert pearson_correlation(x, x) == pytest.approx(1.0)
+
+
+def test_layout_12x1_renderer():
+    record = _make_record()
+    result = render_layout_12x1(
+        record,
+        RenderConfig(layout="12x1"),
+        ecg_id=1,
+        patient_id=1,
+        scp_codes={"NORM": 1},
+    )
+    assert len(result.leads) == 12
+    assert all(lead.t_end == 10.0 for lead in result.leads)
+
+
+def test_hf_export_prepares_card(tmp_path):
+    manifest = tmp_path / "manifest.csv"
+    manifest.write_text(
+        "sample_id,ecg_id,patient_id,diagnosis_query,scp_codes,strat_fold,"
+        "image_path,signal_path,annotation_path,mask_path,yolo_path,clean_image_path,augmentations\n"
+        'ecg_NORM_1,1,10,NORM,"{""NORM"": 80.0}",1,images/x.png,,,,,,\n',
+        encoding="utf-8",
+    )
+    (tmp_path / "images").mkdir()
+    card = build_dataset_card(tmp_path, layout="12x1")
+    assert "SynthECG Dataset" in card
+    out = prepare_hf_export(tmp_path, export_dir=tmp_path / "hf")
+    assert (out / "README.md").exists()
+    assert (out / "dataset_info.json").exists()
+
+
+def test_digitization_12x1_recipe():
+    config = config_from_recipe("digitization-12x1", output_dir="/tmp/x", seed=1)
+    assert config.render.layout == "12x1"
 
 
 def test_select_records_unknown_diagnosis_raises():
