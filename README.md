@@ -137,6 +137,8 @@ ls my_first_dataset/
 # manifest.csv  images/  signals/  annotations/  masks/  labels/
 ```
 
+See [`examples/sample_12lead_ecg.png`](examples/sample_12lead_ecg.png) for a sample output image.
+
 Run the digitization benchmark (best with clean images):
 
 ```bash
