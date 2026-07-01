@@ -13,17 +13,18 @@
 3. [How it works](#how-it-works)
 4. [Installation](#installation)
 5. [Quick start](#quick-start)
-6. [Command reference](#command-reference)
-7. [Common workflows](#common-workflows)
-8. [Dataset recipes](#dataset-recipes)
-9. [Output format](#output-format)
-10. [Annotation schema](#annotation-schema)
-11. [Digitization benchmark](#digitization-benchmark)
-12. [Hugging Face export](#hugging-face-export)
-13. [Configuration reference](#configuration-reference)
-14. [Development](#development)
-15. [Troubleshooting](#troubleshooting)
-16. [Citation & license](#citation--license)
+6. [Example images](#example-images)
+7. [Command reference](#command-reference)
+8. [Common workflows](#common-workflows)
+9. [Dataset recipes](#dataset-recipes)
+10. [Output format](#output-format)
+11. [Annotation schema](#annotation-schema)
+12. [Digitization benchmark](#digitization-benchmark)
+13. [Hugging Face export](#hugging-face-export)
+14. [Configuration reference](#configuration-reference)
+15. [Development](#development)
+16. [Troubleshooting](#troubleshooting)
+17. [Citation & license](#citation--license)
 
 ---
 
@@ -137,7 +138,7 @@ ls my_first_dataset/
 # manifest.csv  images/  signals/  annotations/  masks/  labels/
 ```
 
-See [`examples/sample_12lead_ecg.png`](examples/sample_12lead_ecg.png) for a sample output image.
+See [`examples/sample_12lead_ecg.png`](examples/sample_12lead_ecg.png) for a sample output image, or the full [example gallery](#example-images) below.
 
 Run the digitization benchmark (best with clean images):
 
@@ -145,6 +146,75 @@ Run the digitization benchmark (best with clean images):
 synthecg -n 3 -t NORM --seed 42 --save-clean --augment-profile clean -o bench_demo
 synthecg-benchmark bench_demo
 # Writes bench_demo/benchmark_report.json with per-lead correlation scores
+```
+
+---
+
+## Example images
+
+The images below are **synthetic 12-lead ECG renderings** produced by SynthECG from real waveform data. They are **not** original clinical scan documents. Each example lists its underlying data source, record identifier, and how any arrhythmia localization label was obtained.
+
+Full machine-readable provenance: [`examples/arrhythmia_index.json`](examples/arrhythmia_index.json)
+
+### Normal sinus rhythm (PTB-XL)
+
+| | |
+|---|---|
+| **Diagnosis** | Normal sinus rhythm (`NORM`, `SR`) |
+| **Source dataset** | PTB-XL v1.0.3, record `ecg_id=3094` |
+| **Localization** | Not applicable |
+
+![Normal 12-lead ECG example generated from PTB-XL record #3094](examples/sample_12lead_ecg.png)
+
+### Arrhythmia gallery
+
+#### Atrial fibrillation (AFIB)
+
+| | |
+|---|---|
+| **Source dataset** | PTB-XL v1.0.3, record `ecg_id=351` |
+| **SCP codes** | `AFIB` |
+| **Localization** | None (AFIB has no discrete anatomic origin on surface ECG) |
+
+![Atrial fibrillation example from PTB-XL #351](examples/afib_atrial_fibrillation.png)
+
+#### Premature ventricular contraction — left coronary cusp (PVC / LCC)
+
+| | |
+|---|---|
+| **Source dataset** | Zheng OT-VA database, `hospital_id=762912` |
+| **Localization** | Left coronary cusp (LCC) — **EP ablation ground truth** |
+| **Label source** | Catheter ablation–validated origin from Zheng et al. (2020) |
+
+![PVC with EP-validated LCC origin from Zheng OT-VA database](examples/pvc_left_coronary_cusp.png)
+
+#### AV nodal reentrant tachycardia (AVNRT proxy)
+
+| | |
+|---|---|
+| **Source dataset** | PTB-XL v1.0.3, record `ecg_id=1299` |
+| **SCP codes** | `PSVT` (closest PTB-XL code; PTB-XL has no `AVNRT` label) |
+| **Localization** | Mechanism proxy only (`slow_fast_avnrt`) — algorithm-inferred, not EP-confirmed |
+
+![AVNRT proxy example from PTB-XL PSVT record #1299](examples/avnrt_nodal_reentrant_tachycardia.png)
+
+#### Wolff–Parkinson–White — accessory pathway (WPW)
+
+| | |
+|---|---|
+| **Source dataset** | PTB-XL v1.0.3, record `ecg_id=4825` |
+| **SCP codes** | `WPW` |
+| **Localization** | Coronary sinus ostium (CS OS) — **algorithm-inferred** (`wpw_arruda_milstein_v2`), not ablation-confirmed |
+| **Verified** | `false` — independent EP review may disagree (e.g. CS OS vs free wall) |
+
+![WPW example with algorithm-inferred CS OS pathway from PTB-XL #4825](examples/wpw_accessory_pathway.png)
+
+> **Important:** Algorithm-inferred localization labels (WPW, AVNRT proxy) are research aids only and must not be treated as electrophysiology ground truth. See [docs/LOCALIZATION.md](docs/LOCALIZATION.md).
+
+Regenerate all examples:
+
+```bash
+python scripts/generate_arrhythmia_examples.py
 ```
 
 ---
@@ -715,15 +785,85 @@ The token needs **write** access to the target dataset repository.
 
 ## Citation & license
 
-### Data citation
+### SynthECG software
 
-When using this tool, cite the PTB-XL dataset:
+This repository (the SynthECG **code**) is released under the [MIT License](LICENSE).
 
-> Wagner, P., Strodthoff, N., Bousseljot, R.-D., Kreiseler, D., Lunze, F.I., Samek, W., Schaeffter, T. (2020). **PTB-XL, a large publicly available electrocardiography dataset.** *Scientific Data*, 7, 154.
+If you use SynthECG in research, please cite this repository and the **underlying waveform datasets** listed below.
 
-### License
+---
 
-This project is released under the [MIT License](LICENSE).
+### Example images — data sources & attribution
+
+The PNG files in [`examples/`](examples/) are **derivative synthetic renderings** created by SynthECG. The **underlying 12-lead waveforms** come from the datasets below. When you redistribute, publish, or build upon these examples, you must comply with each dataset’s license and citation requirements.
+
+| Example file | Underlying waveform source | Record ID | License |
+|--------------|---------------------------|-----------|---------|
+| `sample_12lead_ecg.png` | PTB-XL v1.0.3 | `ecg_id=3094` | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) |
+| `afib_atrial_fibrillation.png` | PTB-XL v1.0.3 | `ecg_id=351` | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) |
+| `pvc_left_coronary_cusp.png` | Zheng OT-VA database | `hospital_id=762912` | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) |
+| `avnrt_nodal_reentrant_tachycardia.png` | PTB-XL v1.0.3 | `ecg_id=1299` | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) |
+| `wpw_accessory_pathway.png` | PTB-XL v1.0.3 | `ecg_id=4825` | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) |
+
+**SCP-ECG diagnostic codes** used with PTB-XL follow the Standard Communications Protocol for computer-assisted ECG interpretation (SCP-ECG), as distributed with PTB-XL.
+
+**Localization algorithms** referenced in examples and annotations:
+
+| Algorithm | Used for | Reference |
+|-----------|----------|-----------|
+| `pvc_otva_literature_v2` | PVC / OT-VA origin (RVOT vs LVOT, LCC hint) | Betensky BP et al. *J Am Coll Cardiol.* 2011;57(22):2255–2262. [doi:10.1016/j.jacc.2011.02.018](https://doi.org/10.1016/j.jacc.2011.02.018) |
+| `wpw_arruda_milstein_v2` | WPW accessory pathway region | Arruda MS et al. *J Cardiovasc Electrophysiol.* 1998;9(1):2–12. [doi:10.1111/j.1540-8167.1998.tb00861.x](https://doi.org/10.1111/j.1540-8167.1998.tb00861.x); Milstein / Chiang CE. *Heart Rhythm.* 2008. [doi:10.1016/j.hrthm.2008.08.881](https://doi.org/10.1016/j.hrthm.2008.08.881) |
+| `mechanism_proxy_v1` | AVNRT vs PSVT proxy label | Heuristic only — not a validated clinical classifier |
+
+---
+
+### PTB-XL (primary waveform source)
+
+SynthECG fetches PTB-XL v1.0.3 from PhysioNet by default.
+
+**PhysioNet version citation (required when using v1.0.3):**
+
+> Wagner, P., Strodthoff, N., Bousseljot, R., Samek, W., & Schaeffter, T. (2022). PTB-XL, a large publicly available electrocardiography dataset (version 1.0.3). *PhysioNet*. https://doi.org/10.13026/kfzx-aw45
+
+**Original publication:**
+
+> Wagner, P., Strodthoff, N., Bousseljot, R.-D., Kreiseler, D., Lunze, F.I., Samek, W., Schaeffter, T. (2020). PTB-XL, a large publicly available electrocardiography dataset. *Scientific Data*, 7, 154. https://doi.org/10.1038/s41597-020-0495-6
+
+**PhysioNet platform citation:**
+
+> Goldberger, A., Amaral, L., Glass, L., Hausdorff, J., Ivanov, P. C., Mark, R., … & Stanley, H. E. (2000). PhysioBank, PhysioToolkit, and PhysioNet: Components of a new research resource for complex physiologic signals. *Circulation*, 101(23), e215–e220.
+
+- **Dataset page:** https://physionet.org/content/ptb-xl/1.0.3/
+- **License:** [Creative Commons Attribution 4.0 International (CC BY 4.0)](https://creativecommons.org/licenses/by/4.0/)
+
+---
+
+### Zheng OT-VA database (PVC localization ground truth)
+
+Used for outflow-tract PVC/VT origin labels (e.g. left coronary cusp) when `--database zheng-otva` is selected or in the PVC LCC example image.
+
+**Publication:**
+
+> Zheng, J., Fu, G., Anderson, K., Chu, H. & Rakovski, C. A 12-Lead ECG database to identify origins of idiopathic ventricular arrhythmia containing 334 patients. *Scientific Data* **7**, 98 (2020). https://doi.org/10.1038/s41597-020-0440-8
+
+**Data repository:**
+
+> Zheng, J., Fu, G., Anderson, K., Chu, H. & Rakovski, C. A 12-Lead ECG Database to identify outflow tract origins of idiopathic ventricular arrhythmia containing more than 300 patients. *figshare* (2019). https://doi.org/10.6084/m9.figshare.c.4668086.v2
+
+- **License:** [Creative Commons Attribution 4.0 International (CC BY 4.0)](https://creativecommons.org/licenses/by/4.0/)
+- **Institutions:** Chapman University & Ningbo First Hospital of Zhejiang University
+
+---
+
+### Third-party software libraries
+
+SynthECG depends on open-source libraries including NumPy, SciPy, pandas, OpenCV, Matplotlib, and wfdb (PhysioNet/WFDB Python tools). See [`pyproject.toml`](pyproject.toml) for the full dependency list.
+
+---
+
+### Disclaimer
+
+SynthECG is a **research and educational tool**. Generated images and localization labels are not intended for clinical diagnosis, treatment, or regulatory submission. Always verify dataset licenses and citation requirements before redistributing derived images or publishing results. Algorithm-inferred localization must be clearly distinguished from electrophysiology ground truth.
 
 ---
 
