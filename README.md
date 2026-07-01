@@ -2,15 +2,18 @@
 
 An open-source Python tool for generating realistic, publication-ready synthetic 12-lead ECG images with **ML-ready ground truth** from the [PTB-XL Database](https://physionet.org/content/ptb-xl/).
 
-Version **0.3.0** adds an OpenCV renderer with calibration pulses and clinical headers, segmentation masks, YOLO bounding boxes, parallel batch generation, and a round-trip digitization benchmark.
+Version **0.4.0** adds dataset recipes, resume/checkpoint support, advanced filtering, configurable render parameters, and signal bandpass preprocessing.
 
 ## Features
 
 * **Real clinical data:** Uses actual PTB-XL waveforms across all 12 leads.
 * **OpenCV renderer (default):** Fixed 300 DPI canvas, medical grid, calibration pulses, headers/footers.
-* **Pathology filtering:** Filter by SCP-ECG codes (`AFIB`, `NORM`, `PVC`, `SR`, etc.) or sample randomly.
-* **Reproducible datasets:** `--seed`, PTB-XL `--split`, and `--unique-patients`.
-* **ML-ready exports:** PNG images, `.npy` signals, JSON annotations, segmentation masks, YOLO labels, and `manifest.csv`.
+* **Configurable rendering:** Paper speed (25/50 mm/s), gain (5/10/20 mm/mV), grid on/off.
+* **Signal preprocessing:** Optional 0.5–40 Hz bandpass filter before rendering.
+* **Pathology filtering:** Single-code, multi-label include/exclude, and balanced class sampling.
+* **Dataset recipes:** Predefined configs for digitization, arrhythmia classification, and clinical scans.
+* **Resume support:** `--resume` skips already-generated records in an existing manifest.
+* **ML-ready exports:** PNG images, `.npy` signals, JSON annotations, masks, YOLO labels, `manifest.csv`.
 * **Parallel generation:** `--workers N` for batch dataset builds.
 * **Digitization benchmark:** Round-trip correlation report via `synthecg-benchmark`.
 
@@ -30,81 +33,67 @@ pip install -e .
 synthecg -n 10 -t AFIB --seed 42 --split train --save-clean -o my_afib_dataset
 ```
 
-### Parallel batch generation
+Backward-compatible — subcommand is optional:
 
 ```bash
-synthecg -n 50 -t NORM --seed 42 --workers 4 -o norm_batch
+synthecg generate -n 10 -t AFIB --seed 42 -o my_afib_dataset
+```
+
+### Build from a recipe
+
+```bash
+synthecg dataset list
+synthecg dataset build --recipe digitization-v1 -o digitization_train --seed 42
+synthecg dataset build --recipe arrhythmia-cls -o arrhythmia_train --workers 4
+```
+
+| Recipe | Description |
+|--------|-------------|
+| `digitization-v1` | 100 random train samples, full GT, scan artifacts |
+| `arrhythmia-cls` | Balanced AFIB/SR/PVC/NORM (25 per class) |
+| `clinical-scan` | 50 samples with perspective warp artifacts |
+| `clean-baseline` | 20 clean images for digitization baseline |
+
+### Advanced filtering
+
+```bash
+# Require both NORM and SR labels
+synthecg -n 20 -t random --include-codes NORM SR -o norm_sr_only
+
+# Exclude atrial fibrillation
+synthecg -n 20 -t random --exclude-codes AFIB -o no_afib
+```
+
+### Resume interrupted generation
+
+```bash
+synthecg -n 100 -t NORM --seed 42 -o big_dataset --resume
+```
+
+### Configurable rendering
+
+```bash
+synthecg -n 5 -t NORM --speed 50 --gain 5 --no-grid --bandpass -o fast_gain5
 ```
 
 ### Run digitization benchmark
 
-After generating a dataset with `--save-clean` (recommended for benchmark):
-
 ```bash
 synthecg-benchmark my_afib_dataset
-synthecg-benchmark my_afib_dataset --use-augmented   # test on final augmented images
+synthecg-benchmark my_afib_dataset --use-augmented
 ```
-
-### Arguments
-
-| Flag | Description |
-|------|-------------|
-| `-n`, `--count` | Number of ECG images to generate (default: `5`) |
-| `-t`, `--type` | SCP code such as `NORM`, `AFIB`, `PVC`, or `random` |
-| `-o`, `--output-dir` | Output directory (default: `output_ecgs`) |
-| `--seed` | Random seed for reproducible sampling and augmentations |
-| `--split` | PTB-XL split: `all`, `train` (folds 1–8), `val` (9), `test` (10) |
-| `--workers` | Parallel worker processes (default: `1`) |
-| `--renderer` | `opencv` (default) or `matplotlib` |
-| `--save-clean` | Save pre-augmentation images to `images/clean/` |
-| `--augment-profile` | `clean`, `scan`, or `clinical` |
-| `--no-masks` | Skip segmentation mask export |
-| `--no-yolo` | Skip YOLO label export |
 
 ## Output structure
 
 ```
 my_afib_dataset/
 ├── manifest.csv
-├── benchmark_report.json          # after running synthecg-benchmark
-├── images/
-│   ├── ecg_AFIB_12345.png
-│   └── clean/
-│       └── ecg_AFIB_12345.png     # when --save-clean
+├── benchmark_report.json
+├── images/ (+ images/clean/ with --save-clean)
 ├── signals/
-│   └── ecg_AFIB_12345.npy         # shape (12, n_samples), float32 mV
 ├── masks/
-│   └── ecg_AFIB_12345.png         # waveform segmentation mask
 ├── labels/
-│   ├── classes.txt                # lead_region, lead_label
-│   └── ecg_AFIB_12345.txt         # YOLO format bboxes
 └── annotations/
-    └── ecg_AFIB_12345.json        # metadata, lead bboxes, render params
-```
-
-## Annotation JSON
-
-Each annotation includes per-lead bounding boxes for digitization and detection:
-
-```json
-{
-  "leads": [
-    {
-      "name": "I",
-      "lead_idx": 0,
-      "bbox": [80, 120, 738, 575],
-      "plot_bbox": [154, 140, 600, 535],
-      "baseline_y": 407,
-      "t_start": 0.0,
-      "t_end": 2.5
-    }
-  ],
-  "render": {
-    "backend": "opencv",
-    "px_per_mv": 118.11,
-    "px_per_second": 295.28
-  }
-}
 ```
 
 ## Development

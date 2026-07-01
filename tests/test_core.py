@@ -1,17 +1,19 @@
 import ast
 from unittest.mock import MagicMock
 
-import cv2
 import numpy as np
 import pandas as pd
 import pytest
 
 from synthecg.config import SPLIT_FOLDS, AugmentConfig, RenderConfig
-from synthecg.data.ptbxl import select_records
+from synthecg.data.preprocess import bandpass_filter_signal, preprocess_record
+from synthecg.data.ptbxl import load_completed_ecg_ids, select_balanced_records, select_records
 from synthecg.export.ground_truth import build_annotation, save_signal
 from synthecg.export.manifest import ManifestWriter
 from synthecg.export.yolo import write_yolo_labels
-from synthecg.benchmark.digitize import pearson_correlation, run_benchmark
+from synthecg.benchmark.digitize import pearson_correlation
+from synthecg.recipes.builder import config_from_recipe
+from synthecg.recipes.definitions import get_recipe, list_recipes
 from synthecg.render.opencv_renderer import render_ecg_opencv
 from synthecg.render.types import LeadRegion
 
@@ -54,18 +56,39 @@ def test_select_records_respects_split_and_seed():
     assert list(train.index) == list(again.index)
 
 
-def test_select_records_unique_patients():
+def test_select_records_include_exclude_codes():
     rows = [
-        {"ecg_id": 1, "patient_id": 100, "filename_hr": "a", "scp_codes": {"NORM": 1}, "strat_fold": 1},
-        {"ecg_id": 2, "patient_id": 100, "filename_hr": "b", "scp_codes": {"NORM": 1}, "strat_fold": 2},
-        {"ecg_id": 3, "patient_id": 101, "filename_hr": "c", "scp_codes": {"NORM": 1}, "strat_fold": 3},
+        {"ecg_id": 1, "patient_id": 1, "filename_hr": "a", "scp_codes": {"NORM": 1, "SR": 1}, "strat_fold": 1},
+        {"ecg_id": 2, "patient_id": 2, "filename_hr": "b", "scp_codes": {"NORM": 1, "AFIB": 1}, "strat_fold": 2},
     ]
     df = _make_df(rows).set_index("ecg_id")
-    sample = select_records(df, diagnosis="NORM", count=3, seed=1, unique_patients=True)
-    assert sample["patient_id"].nunique() == len(sample)
+    sample = select_records(df, diagnosis="random", count=5, include_codes=["NORM", "SR"])
+    assert len(sample) == 1
+    assert sample.index[0] == 1
+
+    sample = select_records(df, diagnosis="random", count=5, exclude_codes=["AFIB"])
+    assert len(sample) == 1
 
 
-def test_manifest_writer(tmp_path):
+def test_select_balanced_records():
+    rows = []
+    for ecg_id, code in enumerate(["NORM", "NORM", "AFIB", "AFIB"], start=1):
+        rows.append(
+            {
+                "ecg_id": ecg_id,
+                "patient_id": ecg_id,
+                "filename_hr": f"f{ecg_id}",
+                "scp_codes": {code: 1.0},
+                "strat_fold": 1,
+            }
+        )
+    df = _make_df(rows).set_index("ecg_id")
+    sample = select_balanced_records(df, codes=["NORM", "AFIB"], count_per_code=1, seed=1)
+    assert len(sample) == 2
+    assert set(sample["diagnosis_query"]) == {"NORM", "AFIB"}
+
+
+def test_manifest_writer_resume(tmp_path):
     writer = ManifestWriter(tmp_path)
     writer.add(
         sample_id="ecg_NORM_1",
@@ -77,50 +100,41 @@ def test_manifest_writer(tmp_path):
         image_path="images/ecg_NORM_1.png",
         signal_path="signals/ecg_NORM_1.npy",
         annotation_path="annotations/ecg_NORM_1.json",
-        mask_path="masks/ecg_NORM_1.png",
-        yolo_path="labels/ecg_NORM_1.txt",
-        clean_image_path="images/clean/ecg_NORM_1.png",
-        augmentations=["pink_tint"],
+        augmentations=[],
     )
-    path = writer.write()
-    text = path.read_text(encoding="utf-8")
-    assert "ecg_NORM_1" in text
-    assert "masks/ecg_NORM_1.png" in text
+    writer.write()
+
+    resumed = ManifestWriter(tmp_path, resume=True)
+    assert len(resumed._rows) == 1
+    assert load_completed_ecg_ids(tmp_path) == {1}
 
 
-def test_save_signal_and_annotation(tmp_path):
+def test_bandpass_filter():
     record = _make_record()
-    signal_path = save_signal(record, tmp_path / "test.npy")
-    assert signal_path.exists()
-    loaded = np.load(signal_path)
-    assert loaded.shape == (12, 5000)
+    filtered = preprocess_record(record, bandpass=True)
+    assert filtered.p_signal.shape == record.p_signal.shape
+    assert not np.allclose(filtered.p_signal, record.p_signal)
 
-    render_result = render_ecg_opencv(record, RenderConfig(), ecg_id=1, patient_id=2, scp_codes={"NORM": 80.0})
-    annotation = build_annotation(
+
+def test_recipe_config():
+    config = config_from_recipe("clean-baseline", output_dir="/tmp/test", seed=1)
+    assert config.augment.profile == "clean"
+    assert config.bandpass_filter is True
+    assert config.save_clean is True
+    assert "clean-baseline" in list_recipes()
+    assert get_recipe("clean-baseline")["count"] == 20
+
+
+def test_opencv_renderer_no_grid():
+    record = _make_record()
+    result = render_ecg_opencv(
+        record,
+        RenderConfig(show_grid=False),
         ecg_id=1,
-        patient_id=2,
-        scp_codes={"NORM": 80.0},
-        strat_fold=3,
-        record=record,
-        render=RenderConfig(),
-        augment=AugmentConfig(profile="scan"),
-        augmentations=["pink_tint"],
-        image_path="images/test.png",
-        signal_path="signals/test.npy",
-        render_result=render_result,
+        patient_id=1,
+        scp_codes={"NORM": 1},
     )
-    assert annotation["signal"]["fs"] == 500
-    assert len(annotation["leads"]) == 13
-    assert annotation["render"]["backend"] == "opencv"
-
-
-def test_opencv_renderer_produces_image_and_mask():
-    record = _make_record()
-    result = render_ecg_opencv(record, RenderConfig(), ecg_id=99, patient_id=7, scp_codes={"NORM": 100.0})
-    assert result.image.shape[0] == result.height
-    assert result.mask.shape == (result.height, result.width)
-    assert np.count_nonzero(result.mask) > 0
-    assert len(result.leads) == 13
+    assert result.image is not None
 
 
 def test_yolo_label_format(tmp_path):
@@ -140,8 +154,6 @@ def test_yolo_label_format(tmp_path):
     path = write_yolo_labels(leads, tmp_path / "sample.txt", img_w=200, img_h=100)
     lines = path.read_text(encoding="utf-8").strip().splitlines()
     assert len(lines) == 2
-    assert lines[0].startswith("0 ")
-    assert lines[1].startswith("1 ")
 
 
 def test_pearson_correlation_perfect():

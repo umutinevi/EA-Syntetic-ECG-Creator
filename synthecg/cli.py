@@ -1,13 +1,13 @@
 import argparse
+import sys
 
 from synthecg.config import AugmentConfig, GenerationConfig, RenderConfig
 from synthecg.pipeline import generate_dataset
+from synthecg.recipes.builder import config_from_recipe
+from synthecg.recipes.definitions import list_recipes
 
 
-def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
-        description="Generate synthetic realistic 12-lead ECG images from PTB-XL.",
-    )
+def _add_generate_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("-n", "--count", type=int, default=5, help="Number of ECG images to generate.")
     parser.add_argument(
         "-t",
@@ -17,90 +17,40 @@ def build_parser() -> argparse.ArgumentParser:
         default="random",
         help="Pathology SCP code (e.g. AFIB, NORM, PVC) or 'random'.",
     )
-    parser.add_argument(
-        "-o",
-        "--output-dir",
-        type=str,
-        default="output_ecgs",
-        help="Directory to save the generated dataset.",
-    )
-    parser.add_argument(
-        "--seed",
-        type=int,
-        default=None,
-        help="Random seed for reproducible record selection and augmentations.",
-    )
+    parser.add_argument("-o", "--output-dir", type=str, default="output_ecgs", help="Output directory.")
+    parser.add_argument("--seed", type=int, default=None, help="Random seed.")
     parser.add_argument(
         "--split",
         type=str,
         choices=["all", "train", "val", "test"],
         default="all",
-        help="PTB-XL stratified split (train=folds 1-8, val=9, test=10).",
+        help="PTB-XL stratified split.",
     )
-    parser.add_argument(
-        "--cache-dir",
-        type=str,
-        default=None,
-        help="Directory for caching PTB-XL metadata CSV.",
-    )
-    parser.add_argument(
-        "--unique-patients",
-        action="store_true",
-        help="Sample at most one record per patient.",
-    )
-    parser.add_argument(
-        "--workers",
-        type=int,
-        default=1,
-        help="Parallel worker processes for batch generation (default: 1).",
-    )
-    parser.add_argument(
-        "--renderer",
-        type=str,
-        choices=["opencv", "matplotlib"],
-        default="opencv",
-        help="Rendering backend (default: opencv).",
-    )
+    parser.add_argument("--cache-dir", type=str, default=None, help="PTB-XL metadata cache directory.")
+    parser.add_argument("--unique-patients", action="store_true", help="One record per patient.")
+    parser.add_argument("--workers", type=int, default=1, help="Parallel worker processes.")
+    parser.add_argument("--resume", action="store_true", help="Skip ecg_ids already in manifest.csv.")
+    parser.add_argument("--include-codes", nargs="+", default=[], help="Require all SCP codes (multi-label).")
+    parser.add_argument("--exclude-codes", nargs="+", default=[], help="Exclude records with these SCP codes.")
+    parser.add_argument("--renderer", choices=["opencv", "matplotlib"], default="opencv")
+    parser.add_argument("--speed", type=int, default=25, choices=[25, 50], help="Paper speed mm/s.")
+    parser.add_argument("--gain", type=int, default=10, choices=[5, 10, 20], help="Voltage gain mm/mV.")
+    parser.add_argument("--no-grid", action="store_true", help="Render without ECG grid lines.")
     parser.add_argument(
         "--augment-profile",
-        type=str,
         choices=["clean", "scan", "clinical"],
         default="scan",
-        help="Artifact profile: clean, scan (default), or clinical (scan + perspective).",
     )
-    parser.add_argument(
-        "--save-clean",
-        action="store_true",
-        help="Also save pre-augmentation clean images to images/clean/.",
-    )
-    parser.add_argument(
-        "--no-signals",
-        action="store_true",
-        help="Skip exporting paired .npy signal files.",
-    )
-    parser.add_argument(
-        "--no-annotations",
-        action="store_true",
-        help="Skip exporting JSON annotation files.",
-    )
-    parser.add_argument(
-        "--no-masks",
-        action="store_true",
-        help="Skip exporting waveform segmentation masks.",
-    )
-    parser.add_argument(
-        "--no-yolo",
-        action="store_true",
-        help="Skip exporting YOLO-format label files.",
-    )
-    return parser
+    parser.add_argument("--bandpass", action="store_true", help="Apply 0.5-40 Hz bandpass before rendering.")
+    parser.add_argument("--save-clean", action="store_true", help="Save pre-augmentation images.")
+    parser.add_argument("--no-signals", action="store_true")
+    parser.add_argument("--no-annotations", action="store_true")
+    parser.add_argument("--no-masks", action="store_true")
+    parser.add_argument("--no-yolo", action="store_true")
 
 
-def main(argv: list[str] | None = None) -> None:
-    parser = build_parser()
-    args = parser.parse_args(argv)
-
-    config = GenerationConfig(
+def _config_from_generate_args(args: argparse.Namespace) -> GenerationConfig:
+    return GenerationConfig(
         count=args.count,
         diagnosis=args.diagnosis,
         output_dir=args.output_dir,
@@ -109,19 +59,86 @@ def main(argv: list[str] | None = None) -> None:
         split=args.split,
         unique_patients=args.unique_patients,
         workers=max(1, args.workers),
+        resume=args.resume,
+        include_codes=args.include_codes,
+        exclude_codes=args.exclude_codes,
+        bandpass_filter=args.bandpass,
         export_signals=not args.no_signals,
         export_annotations=not args.no_annotations,
         export_masks=not args.no_masks,
         export_yolo=not args.no_yolo,
         save_clean=args.save_clean,
-        render=RenderConfig(backend=args.renderer),
+        render=RenderConfig(
+            backend=args.renderer,
+            speed_mm_s=args.speed,
+            gain_mm_mv=args.gain,
+            show_grid=not args.no_grid,
+        ),
         augment=AugmentConfig(profile=args.augment_profile, seed=args.seed),
     )
 
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        description="Generate synthetic realistic 12-lead ECG images from PTB-XL.",
+    )
+    subparsers = parser.add_subparsers(dest="command")
+
+    generate_parser = subparsers.add_parser("generate", help="Generate ECG images (default command).")
+    _add_generate_args(generate_parser)
+
+    dataset_parser = subparsers.add_parser("dataset", help="Build predefined dataset recipes.")
+    dataset_sub = dataset_parser.add_subparsers(dest="dataset_command")
+
+    build_parser = dataset_sub.add_parser("build", help="Build a named dataset recipe.")
+    build_parser.add_argument("--recipe", required=True, help="Recipe name (see 'dataset list').")
+    build_parser.add_argument("-o", "--output-dir", required=True, help="Output directory.")
+    build_parser.add_argument("--seed", type=int, default=42, help="Random seed.")
+    build_parser.add_argument("--workers", type=int, default=None, help="Override recipe worker count.")
+    build_parser.add_argument("--resume", action="store_true", help="Resume from existing manifest.")
+
+    list_parser = dataset_sub.add_parser("list", help="List available dataset recipes.")
+
+    return parser
+
+
+def main(argv: list[str] | None = None) -> None:
+    argv = list(sys.argv[1:] if argv is None else argv)
+
+    # Backward compatibility: `synthecg -n 5 -t NORM` without subcommand
+    if argv and argv[0] not in {"generate", "dataset"}:
+        argv = ["generate", *argv]
+
+    parser = build_parser()
+    args = parser.parse_args(argv)
+
     try:
-        generate_dataset(config)
+        if args.command == "generate" or (args.command is None and hasattr(args, "count")):
+            generate_dataset(_config_from_generate_args(args))
+        elif args.command == "dataset":
+            if args.dataset_command == "list":
+                recipes = list_recipes()
+                print("Available dataset recipes:\n")
+                for name, description in recipes.items():
+                    print(f"  {name:20} {description}")
+            elif args.dataset_command == "build":
+                config = config_from_recipe(
+                    args.recipe,
+                    output_dir=args.output_dir,
+                    seed=args.seed,
+                    resume=args.resume,
+                    workers=args.workers,
+                )
+                print(f"Building recipe '{args.recipe}' -> {args.output_dir}")
+                generate_dataset(config)
+            else:
+                parser.print_help()
+                raise SystemExit(1)
+        else:
+            parser.print_help()
+            raise SystemExit(1)
     except Exception as exc:
-        print(f"Error during generation: {exc}")
+        print(f"Error: {exc}")
         raise SystemExit(1) from exc
 
 

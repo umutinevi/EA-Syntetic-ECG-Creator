@@ -7,7 +7,8 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 from synthecg.augment.paper import apply_paper_artifacts_to_arrays
 from synthecg.config import AugmentConfig, GenerationConfig, RenderConfig
 from synthecg.data.fetch import fetch_ptbxl_record
-from synthecg.data.ptbxl import load_ptbxl_database, select_records
+from synthecg.data.preprocess import preprocess_record
+from synthecg.data.ptbxl import load_completed_ecg_ids, load_ptbxl_database, select_balanced_records, select_records
 from synthecg.export.ground_truth import build_annotation, save_annotation, save_signal
 from synthecg.export.manifest import ManifestWriter
 from synthecg.export.masks import save_mask
@@ -20,19 +21,35 @@ def _sample_id(diagnosis: str, ecg_id: int) -> str:
     return f"ecg_{diagnosis}_{ecg_id}"
 
 
+def _diagnosis_query(row, config: GenerationConfig) -> str:
+    if hasattr(row, "diagnosis_query") and getattr(row, "diagnosis_query", None):
+        return str(row.diagnosis_query)
+    if isinstance(row, dict) and row.get("diagnosis_query"):
+        return str(row["diagnosis_query"])
+    return config.diagnosis
+
+
 def _config_from_dict(data: dict) -> GenerationConfig:
-    render = RenderConfig(**data["render"])
+    render_data = data["render"]
+    if "grid_color" in render_data and isinstance(render_data["grid_color"], list):
+        render_data["grid_color"] = tuple(render_data["grid_color"])
+    if "grid_minor_color" in render_data and isinstance(render_data["grid_minor_color"], list):
+        render_data["grid_minor_color"] = tuple(render_data["grid_minor_color"])
+    if "canvas_size" in render_data and isinstance(render_data["canvas_size"], list):
+        render_data["canvas_size"] = tuple(render_data["canvas_size"])
+
+    render = RenderConfig(**render_data)
     augment = AugmentConfig(**data["augment"])
+    skip = {"render", "augment"}
     return GenerationConfig(
         render=render,
         augment=augment,
-        **{k: v for k, v in data.items() if k not in ("render", "augment")},
+        **{k: v for k, v in data.items() if k not in skip},
     )
 
 
 def _config_to_dict(config: GenerationConfig) -> dict:
-    data = asdict(config)
-    return data
+    return asdict(config)
 
 
 def generate_sample(
@@ -53,10 +70,17 @@ def generate_sample(
     patient_id = int(row.patient_id if hasattr(row, "patient_id") else row["patient_id"])
     scp_codes = row.scp_codes if hasattr(row, "scp_codes") else row["scp_codes"]
     strat_fold = int(row.strat_fold if hasattr(row, "strat_fold") else row["strat_fold"])
+    query = _diagnosis_query(row, config)
 
-    sample_id = _sample_id(config.diagnosis, ecg_id)
+    sample_id = _sample_id(query, ecg_id)
 
     record = fetch_ptbxl_record(record_name, database=config.database)
+    record = preprocess_record(
+        record,
+        bandpass=config.bandpass_filter,
+        low_hz=config.bandpass_low_hz,
+        high_hz=config.bandpass_high_hz,
+    )
 
     image_path = images_dir / f"{sample_id}.png"
     signal_path = signals_dir / f"{sample_id}.npy"
@@ -133,6 +157,12 @@ def generate_sample(
             clean_image_path=rel_clean,
             render_result=render_result,
         )
+        if config.bandpass_filter:
+            annotation["preprocess"] = {
+                "bandpass_filter": True,
+                "low_hz": config.bandpass_low_hz,
+                "high_hz": config.bandpass_high_hz,
+            }
         save_annotation(annotation, annotation_path)
         rel_annotation = str(Path("annotations") / annotation_path.name)
 
@@ -151,6 +181,7 @@ def generate_sample(
         "yolo_path": rel_yolo,
         "clean_image_path": rel_clean,
         "augmentations": augmentations,
+        "diagnosis_query": query,
     }
 
 
@@ -170,7 +201,33 @@ def _worker_generate(payload: dict) -> dict:
         clean_dir=output_dir / "images" / "clean" if config.save_clean else None,
         sample_index=payload["sample_index"],
     )
-    return {"diagnosis_query": config.diagnosis, **result}
+    return result
+
+
+def _select_dataset_records(df, config: GenerationConfig, exclude_ecg_ids: set[int]):
+    if config.balanced_codes:
+        count_per_code = config.count_per_code or max(1, config.count // len(config.balanced_codes))
+        return select_balanced_records(
+            df,
+            codes=config.balanced_codes,
+            count_per_code=count_per_code,
+            seed=config.seed,
+            split=config.split,
+            unique_patients=config.unique_patients,
+            exclude_ecg_ids=exclude_ecg_ids,
+        )
+
+    return select_records(
+        df,
+        diagnosis=config.diagnosis,
+        count=config.count,
+        seed=config.seed,
+        split=config.split,
+        unique_patients=config.unique_patients,
+        include_codes=config.include_codes,
+        exclude_codes=config.exclude_codes,
+        exclude_ecg_ids=exclude_ecg_ids,
+    )
 
 
 def generate_dataset(config: GenerationConfig) -> Path:
@@ -196,37 +253,38 @@ def generate_dataset(config: GenerationConfig) -> Path:
     if clean_dir:
         clean_dir.mkdir(parents=True, exist_ok=True)
 
+    exclude_ecg_ids = load_completed_ecg_ids(output_dir) if config.resume else set()
+    if exclude_ecg_ids:
+        print(f"Resume: skipping {len(exclude_ecg_ids)} already-generated ecg_ids.")
+
+    mode = "balanced" if config.balanced_codes else config.diagnosis
     print(
-        f"Preparing to generate {config.count} ECGs "
-        f"(type='{config.diagnosis}', split='{config.split}', seed={config.seed}, "
-        f"workers={config.workers}, renderer={config.render.backend}) ..."
+        f"Preparing to generate records "
+        f"(mode='{mode}', split='{config.split}', seed={config.seed}, "
+        f"workers={config.workers}, renderer={config.render.backend}, "
+        f"bandpass={config.bandpass_filter}) ..."
     )
 
     df = load_ptbxl_database(database=config.database, cache_dir=config.cache_dir)
-    selected = select_records(
-        df,
-        diagnosis=config.diagnosis,
-        count=config.count,
-        seed=config.seed,
-        split=config.split,
-        unique_patients=config.unique_patients,
-    )
+    selected = _select_dataset_records(df, config, exclude_ecg_ids)
 
-    manifest = ManifestWriter(output_dir)
+    if selected.empty:
+        print("No new records to generate.")
+        manifest = ManifestWriter(output_dir, resume=config.resume)
+        return manifest.write()
+
     rows = []
     for index, (_, row) in enumerate(selected.iterrows()):
-        rows.append(
-            {
-                "row": {
-                    "ecg_id": int(row.name),
-                    "patient_id": int(row.patient_id),
-                    "filename_hr": row.filename_hr,
-                    "scp_codes": row.scp_codes,
-                    "strat_fold": int(row.strat_fold),
-                },
-                "sample_index": index,
-            }
-        )
+        row_dict = {
+            "ecg_id": int(row.name),
+            "patient_id": int(row.patient_id),
+            "filename_hr": row.filename_hr,
+            "scp_codes": row.scp_codes,
+            "strat_fold": int(row.strat_fold),
+        }
+        if "diagnosis_query" in row:
+            row_dict["diagnosis_query"] = row.diagnosis_query
+        rows.append({"row": row_dict, "sample_index": index})
 
     config_dict = _config_to_dict(config)
     results: list[dict] = []
@@ -246,7 +304,7 @@ def generate_dataset(config: GenerationConfig) -> Path:
                 clean_dir=clean_dir,
                 sample_index=item["sample_index"],
             )
-            results.append({"diagnosis_query": config.diagnosis, **result})
+            results.append(result)
     else:
         payloads = [{"config": config_dict, **item} for item in rows]
         with ProcessPoolExecutor(max_workers=config.workers) as executor:
@@ -258,9 +316,10 @@ def generate_dataset(config: GenerationConfig) -> Path:
                 print(f"[{completed}/{len(rows)}] Finished ecg_id={payload['row']['ecg_id']}")
                 results.append(future.result())
 
+    manifest = ManifestWriter(output_dir, resume=config.resume)
     for result in sorted(results, key=lambda r: r["sample_id"]):
         manifest.add(**result)
 
     manifest_path = manifest.write()
-    print(f"Generation complete. Manifest: {manifest_path}")
+    print(f"Generation complete. Manifest: {manifest_path} ({len(manifest._rows)} total entries)")
     return manifest_path

@@ -4,7 +4,7 @@ from pathlib import Path
 
 
 class ManifestWriter:
-    """Append-only CSV manifest for generated dataset samples."""
+    """CSV manifest for generated dataset samples, with optional resume support."""
 
     FIELDNAMES = [
         "sample_id",
@@ -22,10 +22,15 @@ class ManifestWriter:
         "augmentations",
     ]
 
-    def __init__(self, output_dir: str | Path):
+    def __init__(self, output_dir: str | Path, resume: bool = False):
         self.output_dir = Path(output_dir)
         self.manifest_path = self.output_dir / "manifest.csv"
         self._rows: list[dict] = []
+
+        if resume and self.manifest_path.exists():
+            with self.manifest_path.open(encoding="utf-8") as handle:
+                self._rows = list(csv.DictReader(handle))
+            print(f"Resuming: loaded {len(self._rows)} existing manifest entries.")
 
     def add(
         self,

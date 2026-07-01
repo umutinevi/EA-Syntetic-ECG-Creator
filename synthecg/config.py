@@ -43,6 +43,14 @@ class GenerationConfig:
     split: Literal["all", "train", "val", "test"] = "all"
     unique_patients: bool = False
     workers: int = 1
+    resume: bool = False
+    include_codes: list[str] = field(default_factory=list)
+    exclude_codes: list[str] = field(default_factory=list)
+    balanced_codes: list[str] = field(default_factory=list)
+    count_per_code: int | None = None
+    bandpass_filter: bool = False
+    bandpass_low_hz: float = 0.5
+    bandpass_high_hz: float = 40.0
     export_signals: bool = True
     export_annotations: bool = True
     export_masks: bool = True
