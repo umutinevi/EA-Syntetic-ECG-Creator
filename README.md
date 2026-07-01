@@ -471,20 +471,113 @@ Output is written to `bench_set/benchmark_report.json`:
 
 ---
 
-## Hugging Face export
+## Hugging Face — automated publishing
 
-Prepare a dataset folder with a Hugging Face dataset card and metadata:
+SynthECG can **generate, export, benchmark, and publish** a dataset to the Hugging Face Hub in one command.
+
+### Install HF extras
 
 ```bash
-synthecg export hf -d my_dataset -o my_dataset/hf_export --layout 3x4+1
+pip install -e ".[hf]"
+export HF_TOKEN=hf_your_token_here   # needs write access
 ```
 
-This creates:
+### One-command publish (recommended)
+
+Generate from a recipe, export, and push:
+
+```bash
+python -m synthecg.hf publish \
+  --recipe clean-baseline \
+  --repo-id your-username/synthecg-demo \
+  --output-dir ./datasets/demo \
+  --benchmark \
+  --push
+```
+
+Or use the shortcut entry point:
+
+```bash
+synthecg-hf publish --recipe digitization-v1 --repo-id your-user/synthecg-v1 --push
+```
+
+### Publish from an existing dataset
+
+```bash
+python -m synthecg.hf publish \
+  -d ./my_dataset \
+  --repo-id your-username/synthecg-v1 \
+  --benchmark \
+  --push
+```
+
+### YAML config (best for automation)
+
+Copy and edit `configs/hf_publish.example.yaml`:
+
+```yaml
+repo_id: your-username/synthecg-digitization-v1
+output_dir: ./datasets/digitization-v1
+recipe: digitization-v1
+seed: 42
+workers: 2
+split: train
+push: true
+private: false
+benchmark: true
+format: folder   # folder | datasets
+```
+
+Run:
+
+```bash
+python -m synthecg.hf publish --config configs/hf_publish.example.yaml
+```
+
+### Publish pipeline steps
+
+| Step | Action |
+|------|--------|
+| 1 | Generate dataset (from `--recipe` or existing `-d`) |
+| 2 | Optional digitization benchmark |
+| 3 | Prepare HF export (`README.md`, `metadata.parquet`, assets) |
+| 4 | Push to Hub (if `--push`) |
+
+A report is saved to `{output_dir}/hf_publish_report.json`.
+
+### Upload formats
+
+| Format | Flag | What gets uploaded |
+|--------|------|-------------------|
+| `folder` | `--format folder` | Full dataset: images, signals, masks, labels, annotations, parquet |
+| `datasets` | `--format datasets` | HF Datasets API: images + metadata columns only |
+
+### GitHub Actions automation
+
+A manual workflow is included at `.github/workflows/publish-hf.yml`.
+
+1. Add `HF_TOKEN` as a repository secret (write access).
+2. Go to **Actions → Publish to Hugging Face → Run workflow**.
+3. Enter `recipe`, `repo_id`, and optional `count`.
+
+### Manual export (without publish pipeline)
+
+```bash
+# Prepare local HF folder only
+python -m synthecg.hf prepare -d my_dataset -o my_dataset/hf_export
+
+# Or via export subcommand
+synthecg export hf -d my_dataset -o my_dataset/hf_export --repo-id your-user/demo
+synthecg export hf -d my_dataset --repo-id your-user/demo --push --private
+```
+
+### HF export folder contents
 
 ```
 my_dataset/hf_export/
-├── README.md           # HF dataset card with label statistics
-├── dataset_info.json   # Machine-readable metadata
+├── README.md            # HF dataset card (auto-generated)
+├── dataset_info.json    # Summary metadata
+├── metadata.parquet     # Flat index for HF Datasets
 ├── manifest.csv
 ├── images/
 ├── signals/
@@ -493,12 +586,21 @@ my_dataset/hf_export/
 └── labels/
 ```
 
-Upload to the Hugging Face Hub (requires `pip install -e ".[hf]"` and a token):
+### Load from Hugging Face
 
-```bash
-export HF_TOKEN=hf_your_token_here
-synthecg export hf -d my_dataset --repo-id your-username/synthecg-demo --push
+```python
+from datasets import load_dataset
+
+# After publishing (metadata + images via datasets format)
+ds = load_dataset("your-username/synthecg-demo")
+
+# Or clone the repo and load locally
+# git clone https://huggingface.co/datasets/your-username/synthecg-demo
+import numpy as np
+signal = np.load("signals/ecg_NORM_12345.npy")
 ```
+
+See also: [docs/HUGGINGFACE.md](docs/HUGGINGFACE.md) for the full automation guide.
 
 ---
 

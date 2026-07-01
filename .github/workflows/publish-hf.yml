@@ -1,0 +1,51 @@
+name: Publish to Hugging Face
+
+on:
+  workflow_dispatch:
+    inputs:
+      recipe:
+        description: "SynthECG recipe name"
+        required: true
+        default: "clean-baseline"
+      repo_id:
+        description: "HF dataset repo id (user/name)"
+        required: true
+      count:
+        description: "Override sample count (optional)"
+        required: false
+      push:
+        description: "Push to Hugging Face Hub"
+        type: boolean
+        default: true
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install SynthECG with HF extras
+        run: pip install -e ".[hf,dev]"
+
+      - name: Publish dataset
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          ARGS="--recipe ${{ inputs.recipe }} --repo-id ${{ inputs.repo_id }} --output-dir ./hf_dataset --benchmark"
+          if [ "${{ inputs.push }}" = "true" ]; then ARGS="$ARGS --push"; else ARGS="$ARGS --no-push"; fi
+          if [ -n "${{ inputs.count }}" ]; then ARGS="$ARGS --count ${{ inputs.count }}"; fi
+          python -m synthecg.hf publish $ARGS
+
+      - name: Upload export artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hf-export
+          path: |
+            hf_dataset/
+            hf_dataset/hf_publish_report.json

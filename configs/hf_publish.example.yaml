@@ -1,0 +1,14 @@
+# Hugging Face publish configuration for SynthECG
+# Usage: python -m synthecg.hf publish --config configs/hf_publish.example.yaml
+
+repo_id: your-username/synthecg-digitization-v1
+output_dir: ./datasets/digitization-v1
+recipe: digitization-v1
+seed: 42
+workers: 2
+split: train
+push: true
+private: false
+benchmark: true
+benchmark_use_clean: true
+format: folder   # folder | datasets

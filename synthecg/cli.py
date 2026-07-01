@@ -107,6 +107,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     list_parser = dataset_sub.add_parser("list", help="List available dataset recipes.")
 
+    hf_auto_parser = subparsers.add_parser("hf", help="Automated Hugging Face publish pipeline.")
+    hf_auto_sub = hf_auto_parser.add_subparsers(dest="hf_command")
+    hf_auto_sub.add_parser("publish", help="Use: python -m synthecg.hf publish ...")
+
     export_parser = subparsers.add_parser("export", help="Export datasets to external formats.")
     export_sub = export_parser.add_subparsers(dest="export_command")
     hf_parser = export_sub.add_parser("hf", help="Prepare or push a Hugging Face dataset.")
@@ -114,6 +118,13 @@ def build_parser() -> argparse.ArgumentParser:
     hf_parser.add_argument("-o", "--export-dir", default=None, help="Local HF export folder.")
     hf_parser.add_argument("--layout", default="3x4+1", choices=["3x4+1", "12x1"])
     hf_parser.add_argument("--repo-id", default=None, help="Hugging Face dataset repo id (user/name).")
+    hf_parser.add_argument("--private", action="store_true", help="Create a private HF dataset repo.")
+    hf_parser.add_argument(
+        "--format",
+        choices=["folder", "datasets"],
+        default="folder",
+        help="Upload format: folder (full assets) or datasets (HF Datasets API).",
+    )
     hf_parser.add_argument("--push", action="store_true", help="Upload to Hugging Face Hub.")
 
     return parser
@@ -123,7 +134,7 @@ def main(argv: list[str] | None = None) -> None:
     argv = list(sys.argv[1:] if argv is None else argv)
 
     # Backward compatibility: `synthecg -n 5 -t NORM` without subcommand
-    if argv and argv[0] not in {"generate", "dataset", "export"}:
+    if argv and argv[0] not in {"generate", "dataset", "export", "hf"}:
         argv = ["generate", *argv]
 
     parser = build_parser()
@@ -161,6 +172,8 @@ def main(argv: list[str] | None = None) -> None:
                         args.repo_id,
                         layout=args.layout,
                         export_dir=args.export_dir,
+                        private=args.private,
+                        format=args.format,
                     )
                     print(f"Uploaded to {url}")
                 else:
@@ -168,11 +181,17 @@ def main(argv: list[str] | None = None) -> None:
                         args.dataset_dir,
                         export_dir=args.export_dir,
                         layout=args.layout,
+                        repo_id=args.repo_id,
                     )
                     print(f"HF export prepared at {out}")
             else:
                 parser.print_help()
                 raise SystemExit(1)
+        elif args.command == "hf":
+            print("Use the dedicated HF automation CLI:")
+            print("  python -m synthecg.hf publish --help")
+            print("  synthecg-hf publish --help")
+            raise SystemExit(0)
         else:
             parser.print_help()
             raise SystemExit(1)
