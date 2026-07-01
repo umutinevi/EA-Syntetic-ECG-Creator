@@ -1,0 +1,5 @@
+HospitalID,Type,LeftRight,Sublocation,Gender
+762912,PVC,Left,LCC,male
+702840,PVC,Right,PosteriorSeptal,female
+707139,PVC,Right,PosteriorSeptal,male
+708534,PVC,Right,PosteriorSeptal,female

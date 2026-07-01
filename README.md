@@ -2,7 +2,7 @@
 
 **SynthECG** is an open-source Python toolkit that turns real clinical ECG waveforms from the [PTB-XL database](https://physionet.org/content/ptb-xl/) into synthetic, publication-quality **12-lead ECG images** — complete with ML-ready ground truth for digitization, detection, and classification research.
 
-> **Current version:** 0.5.0
+> **Current version:** 0.7.0
 
 ---
 
@@ -287,6 +287,7 @@ synthecg dataset build --recipe <name> -o <output_dir> --seed 42
 | `clinical-scan` | 50 | Clinical artifact profile with perspective warps |
 | `clean-baseline` | 20 | No artifacts — for digitization benchmark baselines |
 | `digitization-12x1` | 50 | 12×1 stacked layout for vertical lead digitization |
+| `arrhythmia-localization-v1` | 20 (5×4) | EP-validated OT-VA sites from Zheng dataset (LCC, FreeWall, septal) |
 
 Example:
 
@@ -366,7 +367,7 @@ print(f"SCP codes: {annotation['scp_codes']}")
 
 ## Annotation schema
 
-Each `annotations/*.json` file contains everything needed for digitization and detection:
+Each `annotations/*.json` file contains everything needed for digitization and detection. When arrhythmia localization is available, a `localization` block records the anatomical site, provenance (`ep_ablation` or `algorithm`), and confidence. See [docs/LOCALIZATION.md](docs/LOCALIZATION.md).
 
 ```json
 {

@@ -38,6 +38,10 @@ class AugmentConfig:
     seed: int | None = None
 
 
+def is_zheng_database(database: str) -> bool:
+    return database.strip().lower() in {"zheng-otva", "zheng_otva", "zheng"}
+
+
 @dataclass
 class GenerationConfig:
     count: int = 5
@@ -54,6 +58,9 @@ class GenerationConfig:
     exclude_codes: list[str] = field(default_factory=list)
     balanced_codes: list[str] = field(default_factory=list)
     count_per_code: int | None = None
+    balanced_sites: list[str] = field(default_factory=list)
+    count_per_site: int | None = None
+    infer_localization: bool = True
     bandpass_filter: bool = False
     bandpass_low_hz: float = 0.5
     bandpass_high_hz: float = 40.0

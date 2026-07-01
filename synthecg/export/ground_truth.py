@@ -46,6 +46,8 @@ def build_annotation(
     yolo_path: str | None = None,
     clean_image_path: str | None = None,
     render_result: RenderResult | None = None,
+    localization: dict | None = None,
+    database: str | None = None,
 ) -> dict:
     """Build a JSON-serializable annotation document for one sample."""
     annotation = {
@@ -92,6 +94,11 @@ def build_annotation(
             }
         )
         annotation["leads"] = [_lead_to_dict(lead, render_result) for lead in render_result.leads]
+
+    if database is not None:
+        annotation["database"] = database
+    if localization is not None:
+        annotation["localization"] = localization
 
     return annotation
 

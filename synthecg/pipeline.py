@@ -1,18 +1,29 @@
 from dataclasses import asdict
 from pathlib import Path
+from types import SimpleNamespace
 
 import cv2
 from concurrent.futures import ProcessPoolExecutor, as_completed
 
 from synthecg.augment.paper import apply_paper_artifacts_to_arrays
-from synthecg.config import AugmentConfig, GenerationConfig, RenderConfig
+from synthecg.config import AugmentConfig, GenerationConfig, RenderConfig, is_zheng_database
 from synthecg.data.fetch import fetch_ptbxl_record
 from synthecg.data.preprocess import preprocess_record
 from synthecg.data.ptbxl import load_completed_ecg_ids, load_ptbxl_database, select_balanced_records, select_records
+from synthecg.data.zheng_otva import (
+    DATABASE_ID as ZHENG_DATABASE_ID,
+    fetch_zheng_record,
+    load_completed_hospital_ids,
+    load_zheng_database,
+    localization_from_row,
+    select_zheng_records,
+    zheng_metadata_row,
+)
 from synthecg.export.ground_truth import build_annotation, save_annotation, save_signal
 from synthecg.export.manifest import ManifestWriter
 from synthecg.export.masks import save_mask
 from synthecg.export.yolo import write_classes_file, write_yolo_labels
+from synthecg.localization.inference import infer_localization_from_record
 from synthecg.render.opencv_renderer import render_ecg_opencv
 from synthecg.render.plot import plot_ecg_layout
 
@@ -52,6 +63,35 @@ def _config_to_dict(config: GenerationConfig) -> dict:
     return asdict(config)
 
 
+def _coerce_row(row):
+    if isinstance(row, dict):
+        obj = SimpleNamespace(**row)
+        obj.name = row.get("ecg_id")
+        return obj
+    return row
+
+
+def _resolve_localization(row, record, scp_codes: dict, config: GenerationConfig) -> dict | None:
+    row = _coerce_row(row)
+    if getattr(row, "localization", None):
+        return row.localization
+    if getattr(row, "site", None):
+        return localization_from_row(row).to_dict()
+    if not config.infer_localization:
+        return None
+    info = infer_localization_from_record(record, scp_codes)
+    return info.to_dict() if info else None
+
+
+def _fetch_record(row, config: GenerationConfig):
+    row = _coerce_row(row)
+    if is_zheng_database(config.database):
+        hospital_id = int(row.name) if hasattr(row, "name") else int(row["ecg_id"])
+        return fetch_zheng_record(hospital_id, cache_dir=config.cache_dir)
+    record_name = row.filename_hr if hasattr(row, "filename_hr") else row["filename_hr"]
+    return fetch_ptbxl_record(record_name, database=config.database)
+
+
 def generate_sample(
     row,
     *,
@@ -65,22 +105,23 @@ def generate_sample(
     sample_index: int,
 ) -> dict:
     """Generate one ECG image with optional ground-truth exports."""
-    ecg_id = int(row.name) if hasattr(row, "name") else int(row["ecg_id"])
-    record_name = row.filename_hr if hasattr(row, "filename_hr") else row["filename_hr"]
-    patient_id = int(row.patient_id if hasattr(row, "patient_id") else row["patient_id"])
-    scp_codes = row.scp_codes if hasattr(row, "scp_codes") else row["scp_codes"]
-    strat_fold = int(row.strat_fold if hasattr(row, "strat_fold") else row["strat_fold"])
+    row = _coerce_row(row)
+    ecg_id = int(row.name) if hasattr(row, "name") and row.name is not None else int(row.ecg_id)
+    patient_id = int(getattr(row, "patient_id"))
+    scp_codes = getattr(row, "scp_codes")
+    strat_fold = int(getattr(row, "strat_fold"))
     query = _diagnosis_query(row, config)
 
     sample_id = _sample_id(query, ecg_id)
 
-    record = fetch_ptbxl_record(record_name, database=config.database)
+    record = _fetch_record(row, config)
     record = preprocess_record(
         record,
         bandpass=config.bandpass_filter,
         low_hz=config.bandpass_low_hz,
         high_hz=config.bandpass_high_hz,
     )
+    localization = _resolve_localization(row, record, scp_codes, config)
 
     image_path = images_dir / f"{sample_id}.png"
     signal_path = signals_dir / f"{sample_id}.npy"
@@ -156,6 +197,8 @@ def generate_sample(
             yolo_path=rel_yolo,
             clean_image_path=rel_clean,
             render_result=render_result,
+            localization=localization,
+            database=config.database if is_zheng_database(config.database) else config.database,
         )
         if config.bandpass_filter:
             annotation["preprocess"] = {
@@ -168,7 +211,7 @@ def generate_sample(
 
     print(f"Saved {image_path}")
 
-    return {
+    result = {
         "sample_id": sample_id,
         "ecg_id": ecg_id,
         "patient_id": patient_id,
@@ -183,6 +226,9 @@ def generate_sample(
         "augmentations": augmentations,
         "diagnosis_query": query,
     }
+    if localization is not None:
+        result["localization"] = localization
+    return result
 
 
 def _worker_generate(payload: dict) -> dict:
@@ -204,7 +250,41 @@ def _worker_generate(payload: dict) -> dict:
     return result
 
 
+def _load_completed_ids(config: GenerationConfig) -> set[int]:
+    if config.resume:
+        if is_zheng_database(config.database):
+            return load_completed_hospital_ids(config.output_dir)
+        return load_completed_ecg_ids(config.output_dir)
+    return set()
+
+
+def _load_database(config: GenerationConfig):
+    if is_zheng_database(config.database):
+        return load_zheng_database(config.cache_dir, download_ecg=False)
+    return load_ptbxl_database(database=config.database, cache_dir=config.cache_dir)
+
+
 def _select_dataset_records(df, config: GenerationConfig, exclude_ecg_ids: set[int]):
+    if is_zheng_database(config.database):
+        if config.balanced_sites:
+            count_per_site = config.count_per_site or max(1, config.count // len(config.balanced_sites))
+            return select_zheng_records(
+                df,
+                count=config.count,
+                seed=config.seed,
+                balanced_sites=config.balanced_sites,
+                count_per_site=count_per_site,
+                exclude_hospital_ids=exclude_ecg_ids,
+            )
+        site = None if config.diagnosis.lower() == "random" else config.diagnosis
+        return select_zheng_records(
+            df,
+            count=config.count,
+            seed=config.seed,
+            site=site,
+            exclude_hospital_ids=exclude_ecg_ids,
+        )
+
     if config.balanced_codes:
         count_per_code = config.count_per_code or max(1, config.count // len(config.balanced_codes))
         return select_balanced_records(
@@ -253,19 +333,26 @@ def generate_dataset(config: GenerationConfig) -> Path:
     if clean_dir:
         clean_dir.mkdir(parents=True, exist_ok=True)
 
-    exclude_ecg_ids = load_completed_ecg_ids(output_dir) if config.resume else set()
+    exclude_ecg_ids = _load_completed_ids(config)
     if exclude_ecg_ids:
         print(f"Resume: skipping {len(exclude_ecg_ids)} already-generated ecg_ids.")
 
-    mode = "balanced" if config.balanced_codes else config.diagnosis
+    if is_zheng_database(config.database):
+        config = GenerationConfig(**{**asdict(config), "database": ZHENG_DATABASE_ID})
+
+    mode = (
+        "balanced_sites"
+        if config.balanced_sites
+        else ("balanced" if config.balanced_codes else config.diagnosis)
+    )
     print(
         f"Preparing to generate records "
-        f"(mode='{mode}', split='{config.split}', seed={config.seed}, "
+        f"(database='{config.database}', mode='{mode}', split='{config.split}', seed={config.seed}, "
         f"workers={config.workers}, renderer={config.render.backend}, "
         f"bandpass={config.bandpass_filter}) ..."
     )
 
-    df = load_ptbxl_database(database=config.database, cache_dir=config.cache_dir)
+    df = _load_database(config)
     selected = _select_dataset_records(df, config, exclude_ecg_ids)
 
     if selected.empty:
@@ -275,15 +362,18 @@ def generate_dataset(config: GenerationConfig) -> Path:
 
     rows = []
     for index, (_, row) in enumerate(selected.iterrows()):
-        row_dict = {
-            "ecg_id": int(row.name),
-            "patient_id": int(row.patient_id),
-            "filename_hr": row.filename_hr,
-            "scp_codes": row.scp_codes,
-            "strat_fold": int(row.strat_fold),
-        }
-        if "diagnosis_query" in row:
-            row_dict["diagnosis_query"] = row.diagnosis_query
+        if is_zheng_database(config.database):
+            row_dict = zheng_metadata_row(row)
+        else:
+            row_dict = {
+                "ecg_id": int(row.name),
+                "patient_id": int(row.patient_id),
+                "filename_hr": row.filename_hr,
+                "scp_codes": row.scp_codes,
+                "strat_fold": int(row.strat_fold),
+            }
+            if "diagnosis_query" in row:
+                row_dict["diagnosis_query"] = row.diagnosis_query
         rows.append({"row": row_dict, "sample_index": index})
 
     config_dict = _config_to_dict(config)
