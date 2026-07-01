@@ -3,7 +3,6 @@
 
 from __future__ import annotations
 
-import ast
 import json
 from pathlib import Path
 
@@ -23,17 +22,26 @@ from synthecg.render.overlay import add_clinical_overlay
 REPO_ROOT = Path(__file__).resolve().parents[1]
 EXAMPLES_DIR = REPO_ROOT / "examples"
 
+# Fixed PTB-XL WPW teaching case — localization from literature algorithm only (unverified).
+WPW_EXAMPLE_ECG_ID = 4825
+
 
 def _overlay_secondary(localization: dict | None, fallback: str) -> str:
     if not localization:
         return fallback
     source = localization.get("source", "unknown")
+    verified = localization.get("verified", False)
     region = localization.get("region")
     site = localization.get("site_label") or site_label(localization.get("site") or "")
+    conf = localization.get("confidence", 0)
+    status = "EP-verified" if verified else "unverified algorithm"
+
     if localization.get("level") == "mechanism":
-        return f"Mechanism: {site} (source={source})"
+        return f"Mechanism: {site} ({status}, source={source})"
+    if localization.get("level") == "none":
+        return fallback
     if region:
-        return f"Localization: {region} / {site} (source={source}, conf={localization.get('confidence', 0):.2f})"
+        return f"Localization: {region} / {site} ({status}, conf={conf:.2f})"
     return fallback
 
 
@@ -63,28 +71,6 @@ def _render_example(
         scp_codes=scp_summary,
     )
     cv2.imwrite(str(output_path), img, [cv2.IMWRITE_PNG_COMPRESSION, 9])
-
-
-def _pick_wpw_right_free_wall(df: pd.DataFrame) -> tuple[int, dict]:
-    wpw = df[df.scp_codes.apply(lambda codes: "WPW" in codes)]
-    best_id = int(wpw.index[0])
-    best_loc = None
-    best_conf = -1.0
-    for ecg_id, row in wpw.iterrows():
-        record = preprocess_record(fetch_ptbxl_record(row.filename_hr), bandpass=True)
-        loc = infer_localization_from_record(record, row.scp_codes)
-        if loc is None:
-            continue
-        loc_dict = loc.to_dict()
-        if loc_dict.get("site") in {"right_free_wall", "right_lateral"} and loc.confidence > best_conf:
-            best_id = int(ecg_id)
-            best_loc = loc_dict
-            best_conf = loc.confidence
-    if best_loc is None:
-        record = preprocess_record(fetch_ptbxl_record(wpw.iloc[0].filename_hr), bandpass=True)
-        loc = infer_localization_from_record(record, wpw.iloc[0].scp_codes)
-        best_loc = loc.to_dict() if loc else None
-    return best_id, best_loc or {}
 
 
 def build_examples() -> list[dict]:
@@ -126,7 +112,7 @@ def build_examples() -> list[dict]:
         }
     )
 
-    # PVC LCC — prefer Zheng EP-validated record
+    # PVC LCC — Zheng EP-validated record (verified ground truth)
     zheng_df = load_zheng_database(download_ecg=False)
     lcc_rows = zheng_df[zheng_df.site == "LCC"]
     if lcc_rows.empty:
@@ -196,36 +182,52 @@ def build_examples() -> list[dict]:
         }
     )
 
-    # WPW — algorithm-selected right free wall candidate from PTB-XL
-    wpw_id, wpw_loc = _pick_wpw_right_free_wall(ptbxl)
+    # WPW — literature algorithm only; do NOT claim EP-verified pathway location
+    wpw_id = WPW_EXAMPLE_ECG_ID
     wpw_row = ptbxl.loc[wpw_id]
     wpw_record = preprocess_record(fetch_ptbxl_record(wpw_row.filename_hr), bandpass=True)
+    wpw_loc_obj = infer_localization_from_record(wpw_record, wpw_row.scp_codes)
+    wpw_loc = wpw_loc_obj.to_dict() if wpw_loc_obj else None
+
+    predicted_site = wpw_loc.get("site_label", "unknown") if wpw_loc else "unknown"
     wpw_secondary = _overlay_secondary(
         wpw_loc,
-        "Accessory pathway localization: Right Free Wall (algorithm-inferred)",
+        "WPW — accessory pathway localization requires EP confirmation",
     )
+    wpw_primary = "Wolff-Parkinson-White (WPW) — Literature Algorithm (Unverified)"
+
+    out_name = "wpw_accessory_pathway.png"
+    legacy_name = EXAMPLES_DIR / "wpw_right_free_wall.png"
+    if legacy_name.exists():
+        legacy_name.unlink()
+
     _render_example(
         wpw_record,
         ecg_id=wpw_id,
         patient_id=int(wpw_row.patient_id),
         scp_codes=wpw_row.scp_codes,
-        primary_label="Wolff-Parkinson-White (WPW) Syndrome",
+        primary_label=wpw_primary,
         secondary_label=wpw_secondary,
-        output_path=EXAMPLES_DIR / "wpw_right_free_wall.png",
+        output_path=EXAMPLES_DIR / out_name,
     )
     manifest.append(
         {
-            "filename": "wpw_right_free_wall.png",
+            "filename": out_name,
             "database": "ptb-xl/1.0.3",
             "ecg_id": wpw_id,
             "patient_id": int(wpw_row.patient_id),
             "scp_codes": wpw_row.scp_codes,
             "scp_filter": "WPW",
-            "primary_label": "Wolff-Parkinson-White (WPW) Syndrome",
+            "primary_label": wpw_primary,
             "secondary_label": wpw_secondary,
             "report": str(wpw_row.report),
             "filename_hr": wpw_row.filename_hr,
             "localization": wpw_loc,
+            "clinical_note": (
+                f"Literature algorithm predicts {predicted_site}. "
+                "Independent EP review may disagree (e.g. CS OS vs free wall). "
+                "Not ablation ground truth."
+            ),
         }
     )
 

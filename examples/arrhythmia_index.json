@@ -20,8 +20,10 @@
       "site_label": "Not Applicable",
       "source": "manual_curated",
       "confidence": 1.0,
+      "verified": true,
       "taxonomy_version": "synthecg-v1",
       "algorithm": null,
+      "literature_references": [],
       "features": {
         "note": "Atrial fibrillation has no discrete ectopic origin"
       },
@@ -38,8 +40,8 @@
     },
     "scp_filter": "PVC",
     "primary_label": "Premature Ventricular Contraction (PVC)",
-    "secondary_label": "Localization: LVOT / Left Coronary Cusp (source=ep_ablation, conf=1.00)",
-    "report": "Zheng OT-VA EP-validated LCC origin (parameters from ablation mapping.",
+    "secondary_label": "Localization: LVOT / Left Coronary Cusp (EP-verified, conf=1.00)",
+    "report": "Zheng OT-VA EP-validated LCC origin (ablation mapping confirmed).",
     "filename_hr": "762912",
     "localization": {
       "level": "sublocation",
@@ -48,8 +50,10 @@
       "site_label": "Left Coronary Cusp",
       "source": "ep_ablation",
       "confidence": 1.0,
+      "verified": true,
       "taxonomy_version": "synthecg-v1",
       "algorithm": null,
+      "literature_references": [],
       "features": {},
       "decision_path": []
     }
@@ -64,7 +68,7 @@
     },
     "scp_filter": "PSVT",
     "primary_label": "AVNRT \u2014 Atrioventricular Nodal Reentrant Tachycardia",
-    "secondary_label": "Mechanism: Slow-Fast AVNRT (source=algorithm)",
+    "secondary_label": "Mechanism: Slow-Fast AVNRT (unverified algorithm, source=algorithm)",
     "report": "supraventrikul\u00c4re tachykardie rechtstyp linksposteriorer hemiblock st & t abnormal, wahrscheinlich    anteriore isch\u00c4mie oder linksbelastung    inferolaterale isch\u00c4mie oder linksbelastung",
     "filename_hr": "records500/01000/01299_hr",
     "localization": {
@@ -74,8 +78,10 @@
       "site_label": "Slow-Fast AVNRT",
       "source": "algorithm",
       "confidence": 0.5,
+      "verified": false,
       "taxonomy_version": "synthecg-v1",
       "algorithm": "mechanism_proxy_v1",
+      "literature_references": [],
       "features": {
         "note": "PTB-XL PSVT used as AVNRT proxy; mechanism only"
       },
@@ -85,7 +91,7 @@
     }
   },
   {
-    "filename": "wpw_right_free_wall.png",
+    "filename": "wpw_accessory_pathway.png",
     "database": "ptb-xl/1.0.3",
     "ecg_id": 4825,
     "patient_id": 19477,
@@ -95,34 +101,42 @@
       "SR": 0.0
     },
     "scp_filter": "WPW",
-    "primary_label": "Wolff-Parkinson-White (WPW) Syndrome",
-    "secondary_label": "Localization: AP / Right Free Wall Accessory Pathway (source=algorithm, conf=0.82)",
+    "primary_label": "Wolff-Parkinson-White (WPW) \u2014 Literature Algorithm (Unverified)",
+    "secondary_label": "Localization: AP / Coronary Sinus Ostium (CS OS) (unverified algorithm, conf=0.48)",
     "report": "sinusrhythmus lagetyp normal unspezifischer intraventrikul\u00c4rer block m\u00d6glicherweise wpw typ b linkshypertrophie qrs(t) abnormal    inferiorer myokardschaden nicht auszuschliessen",
     "filename_hr": "records500/04000/04825_hr",
     "localization": {
       "level": "sublocation",
       "region": "AP",
-      "site": "right_free_wall",
-      "site_label": "Right Free Wall Accessory Pathway",
+      "site": "coronary_sinus_ostium",
+      "site_label": "Coronary Sinus Ostium (CS OS)",
       "source": "algorithm",
-      "confidence": 0.82,
+      "confidence": 0.48,
+      "verified": false,
       "taxonomy_version": "synthecg-v1",
-      "algorithm": "wpw_arruda_simplified_v1",
+      "algorithm": "wpw_arruda_milstein_v2",
+      "literature_references": [
+        "Arruda MS et al. ECG algorithm for accessory pathway ablation site. J Cardiovasc Electrophysiol. 1998;9(1):2-12. doi:10.1111/j.1540-8167.1998.tb00861.x",
+        "Milstein et al. / Chiang CE. Hands-on AP localization by 12-lead ECG. Heart Rhythm. 2008. doi:10.1016/j.hrthm.2008.08.881"
+      ],
       "features": {
-        "delta_polarity": {
+        "delta_polarity_20ms": {
           "I": "neg",
-          "II": "pos",
-          "aVF": "pos",
-          "V1": "neg"
+          "II": "neg",
+          "III": "neg",
+          "aVF": "neg",
+          "V1": "pos"
         },
         "rs_v1": 0.24160561990392065,
-        "rs_iii": 0.6532618657155486
+        "rs_iii": 0.6532618657155486,
+        "clinical_note": "Algorithm prediction only \u2014 requires EP/ablation confirmation before clinical use."
       },
       "decision_path": [
-        "delta_polarity={'I': 'neg', 'II': 'pos', 'aVF': 'pos', 'V1': 'neg'}",
-        "rs_v1=0.242 rs_iii=0.653",
-        "right_free_wall=V1_neg_low_rs"
+        "arruda_delta_polarity={'I': 'neg', 'II': 'neg', 'III': 'neg', 'aVF': 'neg', 'V1': 'pos'}",
+        "arruda_rs_v1=0.242 rs_iii=0.653",
+        "arruda_rule=negative_delta_II_coronary_venous_CS_OS"
       ]
-    }
+    },
+    "clinical_note": "Literature algorithm predicts Coronary Sinus Ostium (CS OS). Independent EP review may disagree (e.g. CS OS vs free wall). Not ablation ground truth."
   }
 ]

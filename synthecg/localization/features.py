@@ -17,6 +17,9 @@ LEAD_AVF = LEAD_NAMES.index("aVF")
 LEAD_V1 = LEAD_NAMES.index("V1")
 LEAD_V2 = LEAD_NAMES.index("V2")
 LEAD_V3 = LEAD_NAMES.index("V3")
+LEAD_V4 = LEAD_NAMES.index("V4")
+LEAD_V5 = LEAD_NAMES.index("V5")
+LEAD_V6 = LEAD_NAMES.index("V6")
 
 
 def _lead_signal(signal: np.ndarray, lead_idx: int) -> np.ndarray:
@@ -112,6 +115,54 @@ def v2_transition_ratio(sr: np.ndarray, ectopic: np.ndarray) -> float | None:
     return float(ect_ratio / sr_ratio)
 
 
+def rs_ratio(segment: np.ndarray) -> float:
+    r, s = _max_r_min_s(segment)
+    if r + s <= 1e-6:
+        return 0.0
+    return float(r / (r + s))
+
+
+def v2s_v3r_index(ectopic: np.ndarray) -> float | None:
+    """Yoshida V2S/V3R index during the ectopic beat (< 1.5 suggests LVOT)."""
+    _, s_v2 = _max_r_min_s(ectopic[LEAD_V2])
+    r_v3, _ = _max_r_min_s(ectopic[LEAD_V3])
+    if r_v3 <= 1e-6:
+        return None
+    return float(s_v2 / r_v3)
+
+
+def v1_v3_transition_index(sr: np.ndarray, ectopic: np.ndarray) -> float | None:
+    """
+    Di et al. V1-V3 transition index.
+
+    > -1.60 predicts RVOT origin (vs LVOT) when precordial transition is in V3.
+    """
+    terms_s = []
+    terms_r = []
+    for lead_idx in (LEAD_V1, LEAD_V2):
+        sr_r, sr_s = _max_r_min_s(sr[lead_idx])
+        ect_r, ect_s = _max_r_min_s(ectopic[lead_idx])
+        if sr_s <= 1e-6 or sr_r <= 1e-6:
+            return None
+        terms_s.append(ect_s / sr_s)
+    for lead_idx in (LEAD_V1, LEAD_V2, LEAD_V3):
+        sr_r, sr_s = _max_r_min_s(sr[lead_idx])
+        ect_r, ect_s = _max_r_min_s(ectopic[lead_idx])
+        if sr_r <= 1e-6:
+            return None
+        terms_r.append(ect_r / sr_r)
+    return float(sum(terms_s) - sum(terms_r))
+
+
+def precordial_transition_lead(ectopic: np.ndarray) -> int | None:
+    """First precordial lead where R >= S during the ectopic beat (V1=0 .. V6=5)."""
+    for offset, lead_idx in enumerate((LEAD_V1, LEAD_V2, LEAD_V3, LEAD_V4, LEAD_V5, LEAD_V6)):
+        r, s = _max_r_min_s(ectopic[lead_idx])
+        if r >= s:
+            return offset + 1
+    return None
+
+
 def v1_r_wave_amplitude(ectopic: np.ndarray) -> float:
     """Peak positive deflection in V1 during ectopic beat (LCC often shows small r)."""
     return float(np.max(ectopic[LEAD_V1]))
@@ -131,14 +182,37 @@ def delta_polarity(lead_segment: np.ndarray, fs: float, ms: int = 20) -> str:
     return "neg"
 
 
-def average_beat_qrs(signal: np.ndarray, fs: float) -> np.ndarray:
-    """Build an average 12-lead QRS using the first detected beat."""
+def extract_delta_polarities(signal: np.ndarray, fs: float, ms: int = 20) -> dict[str, str]:
+    """Arruda-style delta polarity in I, II, III, aVF, V1 at the QRS onset."""
     lead_ii = _lead_signal(signal, LEAD_II)
     peaks = detect_r_peaks(lead_ii, fs)
     if len(peaks) == 0:
-        mid = len(lead_ii) // 2
-        peaks = np.array([mid])
-    peak = int(peaks[0])
+        peak = len(lead_ii) // 2
+    else:
+        peak = int(peaks[0])
+
+    onset = max(0, peak - int(0.04 * fs))
+    n = max(1, int(ms / 1000.0 * fs))
+    labels = {
+        "I": LEAD_I,
+        "II": LEAD_II,
+        "III": LEAD_III,
+        "aVF": LEAD_AVF,
+        "V1": LEAD_V1,
+    }
+    pol: dict[str, str] = {}
+    for name, lead_idx in labels.items():
+        lead = _lead_signal(signal, lead_idx)
+        end = min(len(lead), onset + n)
+        pol[name] = delta_polarity(lead[onset:end], fs, ms=ms)
+    return pol
+
+
+def extract_qrs_segment_at_peak(signal: np.ndarray, fs: float) -> np.ndarray:
+    """12-lead QRS segment aligned to the primary R peak (lead II)."""
+    lead_ii = _lead_signal(signal, LEAD_II)
+    peaks = detect_r_peaks(lead_ii, fs)
+    peak = int(peaks[0]) if len(peaks) else len(lead_ii) // 2
     segments = []
     for lead_idx in range(12):
         lead = _lead_signal(signal, lead_idx)

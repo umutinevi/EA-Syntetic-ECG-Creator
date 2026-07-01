@@ -15,8 +15,10 @@ class LocalizationInfo:
     site_label: str
     source: str
     confidence: float
+    verified: bool = False
     taxonomy_version: str = TAXONOMY_VERSION
     algorithm: str | None = None
+    literature_references: list[str] = field(default_factory=list)
     features: dict = field(default_factory=dict)
     decision_path: list[str] = field(default_factory=list)
 
@@ -27,6 +29,7 @@ class LocalizationInfo:
         region: str,
         site: str,
         confidence: float = 1.0,
+        literature_references: list[str] | None = None,
     ) -> LocalizationInfo:
         return cls(
             level="sublocation",
@@ -35,6 +38,8 @@ class LocalizationInfo:
             site_label=site_label(site),
             source="ep_ablation",
             confidence=confidence,
+            verified=True,
+            literature_references=literature_references or [],
         )
 
     @classmethod
@@ -48,7 +53,10 @@ class LocalizationInfo:
         features: dict | None = None,
         decision_path: list[str] | None = None,
         level: str = "sublocation",
+        literature_references: list[str] | None = None,
+        confidence_cap: float | None = None,
     ) -> LocalizationInfo:
+        capped = confidence if confidence_cap is None else min(confidence, confidence_cap)
         label = site_label(site) if site else "Unknown"
         return cls(
             level=level,
@@ -56,8 +64,10 @@ class LocalizationInfo:
             site=site,
             site_label=label,
             source="algorithm",
-            confidence=confidence,
+            confidence=capped,
+            verified=False,
             algorithm=algorithm,
+            literature_references=literature_references or [],
             features=features or {},
             decision_path=decision_path or [],
         )
@@ -71,6 +81,7 @@ class LocalizationInfo:
             site_label=site_label("none"),
             source="manual_curated",
             confidence=1.0,
+            verified=True,
             features={"note": reason},
         )
 
