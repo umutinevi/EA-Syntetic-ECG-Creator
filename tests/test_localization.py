@@ -73,6 +73,85 @@ def test_pvc_algorithm_lvot_lcc():
     assert result.features.get("v2_transition_ratio", 0) >= 0.6
 
 
+def _pvc_signal_with_v2_polarity(
+    *,
+    v2_r: float,
+    v2_s: float,
+    v3_r: float,
+    v1_s: float = 0.5,
+    fs: float = 500.0,
+    seconds: float = 4.0,
+) -> np.ndarray:
+    """12-lead signal with three biphasic sinus beats and one high-energy PVC.
+
+    The PVC's V2/V3 amplitudes are configurable so a test can dial in a known
+    Betensky V2 transition ratio and Yoshida V2S/V3R index.
+    """
+    n = int(fs * seconds)
+    signal = np.zeros((12, n), dtype=np.float32)
+    from synthecg.localization.features import LEAD_II, LEAD_V1, LEAD_V2, LEAD_V3
+
+    w = int(0.05 * fs)
+    for center in (int(0.8 * fs), int(1.6 * fs), int(3.2 * fs)):
+        for lead in range(12):
+            signal[lead, center - w : center] += 0.15  # small R
+            signal[lead, center : center + w] -= 0.15  # small S (ratio ~0.5)
+
+    pc = int(2.4 * fs)
+    pw = int(0.07 * fs)
+    signal[LEAD_II, pc - pw : pc + pw] += 1.2  # tall R -> highest energy beat
+    signal[LEAD_V2, pc - pw : pc] += v2_r
+    signal[LEAD_V2, pc : pc + pw] -= v2_s
+    signal[LEAD_V3, pc - pw : pc + pw] += v3_r
+    signal[LEAD_V1, pc - pw : pc + pw] -= v1_s
+    return signal
+
+
+def test_max_r_min_s_amplitudes_non_negative():
+    """R and S wave amplitudes are deflections from baseline; never negative."""
+    from synthecg.localization.features import _max_r_min_s
+
+    r, s = _max_r_min_s(np.array([0.1, 0.2, 0.3], dtype=np.float32))  # monophasic R
+    assert r > 0 and s == 0.0
+    r, s = _max_r_min_s(np.array([-0.1, -0.2, -0.3], dtype=np.float32))  # monophasic S
+    assert r == 0.0 and s > 0
+
+
+def test_v2s_v3r_index_never_negative():
+    """An all-positive V2 window must not yield a negative Yoshida index."""
+    from synthecg.localization.features import v2s_v3r_index
+
+    ectopic = np.zeros((12, 40), dtype=np.float32)
+    ectopic[7] = 0.5  # V2 entirely positive (monophasic R)
+    ectopic[8] = 0.3  # V3 positive
+    index = v2s_v3r_index(ectopic)
+    assert index is None or index >= 0.0
+
+
+def test_pvc_betensky_primary_beats_discordant_yoshida():
+    """Betensky RVOT must win over a discordant Yoshida LVOT vote.
+
+    v2_ratio ~0.2 (< 0.6 -> RVOT) but V2S/V3R ~0.75 (< 1.5 -> LVOT). The old
+    permissive OR-logic mislabeled this LVOT/Summit; the primary Betensky
+    discriminator makes it RVOT.
+    """
+    signal = _pvc_signal_with_v2_polarity(v2_r=0.1, v2_s=0.9, v3_r=1.2)
+    result = infer_pvc_localization(signal, fs=500.0)
+    assert result is not None
+    assert result.region == "RVOT"
+    assert result.features["v2_transition_ratio"] < 0.6
+    assert result.features["v2s_v3r_index"] < 1.5
+    assert "yoshida_discordant_confidence_penalty" in result.decision_path
+
+
+def test_pvc_rvot_morphology_not_lvot():
+    """A dominant-negative V2 (LBBB/RVOT) PVC localizes to RVOT, not LVOT/LCC."""
+    signal = _pvc_signal_with_v2_polarity(v2_r=0.05, v2_s=1.0, v3_r=0.1)
+    result = infer_pvc_localization(signal, fs=500.0)
+    assert result is not None
+    assert result.region == "RVOT"
+
+
 def test_wpw_literature_rules_cs_os_pattern():
     """I− / II+ / V1− / low R/S should map to CS OS, not free wall (Milstein + combined rule)."""
     fs = 500.0

@@ -74,19 +74,30 @@ def infer_pvc_localization(signal, fs: float) -> LocalizationInfo | None:
     if transition_lead is not None:
         decision_path.append(f"precordial_transition=V{transition_lead}")
 
-    lvot_votes = 0
-    if v2_ratio >= BETENSKY_LVOT_THRESHOLD:
-        lvot_votes += 1
-        decision_path.append("betensky_vote=LVOT")
-    if v2s_v3r is not None and v2s_v3r < YOSHIDA_LVOT_V2S_V3R_THRESHOLD:
-        lvot_votes += 1
-        decision_path.append("yoshida_vote=LVOT")
+    # Betensky V2 transition ratio (JACC 2011) is the primary, best-validated
+    # LVOT-vs-RVOT discriminator: >= 0.6 -> LVOT. The Yoshida V2S/V3R index
+    # (JCE 2014) only *confirms* the call or lowers confidence when it disagrees;
+    # it must never override Betensky. A single spurious LVOT vote previously
+    # forced an LVOT/LCC site of origin even when Betensky indicated RVOT.
+    betensky_lvot = v2_ratio >= BETENSKY_LVOT_THRESHOLD
+    decision_path.append(f"betensky_vote={'LVOT' if betensky_lvot else 'RVOT'}")
 
-    is_lvot = lvot_votes >= 1 or v2_ratio >= BETENSKY_LVOT_THRESHOLD
+    yoshida_valid = v2s_v3r is not None and v2s_v3r >= 0.0
+    yoshida_lvot = yoshida_valid and v2s_v3r < YOSHIDA_LVOT_V2S_V3R_THRESHOLD
+    if yoshida_valid:
+        decision_path.append(f"yoshida_vote={'LVOT' if yoshida_lvot else 'RVOT'}")
+    else:
+        decision_path.append("yoshida_vote=invalid_skipped")
+
+    is_lvot = betensky_lvot
+    concordant = (not yoshida_valid) or (yoshida_lvot == betensky_lvot)
 
     if is_lvot:
         region = "LVOT"
         confidence = 0.55 + min(0.15, max(0.0, v2_ratio - BETENSKY_LVOT_THRESHOLD))
+        if not concordant:
+            confidence -= 0.10
+            decision_path.append("yoshida_discordant_confidence_penalty")
         v1_r = v1_r_wave_amplitude(pvc)
         features["v1_r_amplitude_mv"] = v1_r
         decision_path.append(f"v1_r_amplitude={v1_r:.4f}")
@@ -104,6 +115,9 @@ def infer_pvc_localization(signal, fs: float) -> LocalizationInfo | None:
     else:
         region = "RVOT"
         confidence = 0.55 + min(0.15, max(0.0, BETENSKY_LVOT_THRESHOLD - v2_ratio))
+        if not concordant:
+            confidence -= 0.10
+            decision_path.append("yoshida_discordant_confidence_penalty")
         v1v3 = v1_v3_transition_index(sr, pvc)
         features["v1_v3_transition_index"] = v1v3
         v1_rs = rs_ratio(pvc[LEAD_V1])

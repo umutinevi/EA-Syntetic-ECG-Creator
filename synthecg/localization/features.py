@@ -49,8 +49,19 @@ def _qrs_window(lead: np.ndarray, peak: int, fs: float) -> slice:
 
 
 def _max_r_min_s(segment: np.ndarray) -> tuple[float, float]:
-    r = float(np.max(segment))
-    s = float(-np.min(segment))
+    """Return (R, S) wave amplitudes as non-negative deflections from baseline.
+
+    R is an upward deflection and S a downward deflection relative to the
+    isoelectric line (0 on bandpass-filtered signals). A monophasic QRS has no
+    opposing wave, so the missing wave's amplitude is 0 — never negative.
+    Clamping matters: an unclamped ``-min`` goes negative for an all-positive
+    window and corrupts every downstream ratio (e.g. the Yoshida V2S/V3R index),
+    which can flip the predicted site of origin.
+    """
+    if segment.size == 0:
+        return 0.0, 0.0
+    r = float(max(0.0, np.max(segment)))
+    s = float(max(0.0, -np.min(segment)))
     return r, s
 
 
@@ -63,6 +74,13 @@ def isolate_pvc_beat(
     """Return indices of (sinus_beat_peak, pvc_beat_peak) or (None, None)."""
     lead = _lead_signal(signal, reference_lead)
     peaks = detect_r_peaks(lead, fs)
+    # Drop peaks whose full QRS window falls off the record edges; an edge
+    # artifact selected as the sinus reference beat yields a truncated window
+    # and unreliable amplitudes.
+    margin = int(0.08 * fs)
+    interior = peaks[(peaks >= margin) & (peaks < len(lead) - margin)]
+    if len(interior) >= 2:
+        peaks = interior
     if len(peaks) < 2:
         return None, None
 

@@ -35,10 +35,17 @@ Every localization block includes:
 
 Multi-step pipeline from published criteria:
 
-1. **Betensky V2 transition ratio** (≥ 0.6 → LVOT) — JACC 2011
-2. **Yoshida V2S/V3R index** (< 1.5 supports LVOT) — JCE 2014
+1. **Betensky V2 transition ratio** (≥ 0.6 → LVOT) — JACC 2011. This is the
+   **primary** LVOT-vs-RVOT discriminator; it decides the region on its own.
+2. **Yoshida V2S/V3R index** (< 1.5 supports LVOT) — JCE 2014. Used only to
+   **confirm** the Betensky call; when the two disagree the region still follows
+   Betensky and the confidence is lowered. Yoshida never overrides Betensky.
 3. **LCC morphology** — small r wave in V1 during ectopic beat
 4. **Di V1–V3 transition index** (> −1.60 → RVOT septal vs lateral) — JCE 2021
+
+R and S wave amplitudes feeding these ratios are measured as non-negative
+deflections from the isoelectric baseline, so a monophasic QRS never produces a
+negative "amplitude" that would corrupt a ratio and flip the predicted origin.
 
 Confidence capped at **0.75** (`verified=false`).
 
